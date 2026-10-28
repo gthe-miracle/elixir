@@ -8,6 +8,9 @@ import 'page.dart';
 /// Handles the system back button instead of `navigator.maybePop()`; returns whether the press was handled.
 typedef ElixirBackHandler = Future<bool> Function(NavigatorState navigator);
 
+/// Called with a change of an Elixir or of an Elixir nested inside it, see [Elixir.listener].
+typedef ElixirListener = void Function(ElixirNotification notification);
+
 /// {@template elixir}
 /// Renders an [ElixirController] with a [Navigator].
 ///
@@ -29,6 +32,7 @@ class Elixir extends StatefulWidget {
   /// {@macro elixir}
   const Elixir({
     required this.controller,
+    this.listener,
     this.observers = const <NavigatorObserver>[],
     this.transitionDelegate = const DefaultTransitionDelegate<Object?>(),
     this.onBackButtonPressed,
@@ -39,6 +43,16 @@ class Elixir extends StatefulWidget {
 
   /// The owner of the pages.
   final ElixirController controller;
+
+  /// Called after every change of this Elixir and of every Elixir nested inside it; `controller.name` tells them
+  /// apart. The notification keeps bubbling up whatever this does, and an error it throws is reported.
+  /// ```dart
+  /// Elixir(
+  ///   controller: controller,
+  ///   listener: (n) => log('${n.controller.name?.alias}: ${n.next.join(' > ')}'),
+  /// );
+  /// ```
+  final ElixirListener? listener;
 
   /// Observers of the underlying [Navigator].
   final List<NavigatorObserver> observers;
@@ -171,19 +185,39 @@ class _ElixirState extends State<Elixir> with WidgetsBindingObserver {
     final next = _last = widget.controller.state;
     if (!mounted || identical(previous, next)) return;
     setState(() {});
+    final notification = ElixirNotification(widget.controller, previous, next);
+    // The notification bubbles up from here, so the NotificationListener built below never sees it: call the listener.
+    _callListener(notification);
     try {
-      ElixirNotification(widget.controller, previous, next).dispatch(context);
+      notification.dispatch(context);
     } on Object catch (error, stackTrace) {
-      FlutterError.reportError(
-        FlutterErrorDetails(
-          exception: error,
-          stack: stackTrace,
-          library: 'elixir',
-          context: ErrorDescription('while dispatching an ElixirNotification of ${widget.controller}'),
-        ),
-      );
+      _report(error, stackTrace, 'dispatching an ElixirNotification');
     }
   }
+
+  /// The changes of the nested Elixirs, on their way up.
+  bool _handleNestedChange(ElixirNotification notification) {
+    _callListener(notification);
+    return false;
+  }
+
+  /// A throwing listener would stop the notification on its way up.
+  void _callListener(ElixirNotification notification) {
+    try {
+      widget.listener?.call(notification);
+    } on Object catch (error, stackTrace) {
+      _report(error, stackTrace, 'calling the listener');
+    }
+  }
+
+  void _report(Object error, StackTrace stackTrace, String action) => FlutterError.reportError(
+    FlutterErrorDetails(
+      exception: error,
+      stack: stackTrace,
+      library: 'elixir',
+      context: ErrorDescription('while $action of ${widget.controller}'),
+    ),
+  );
 
   /// Called by the [Navigator] for a page the user or the framework closed.
   void _handleDidRemovePage(Page<Object?> page) {
@@ -282,16 +316,20 @@ class _ElixirState extends State<Elixir> with WidgetsBindingObserver {
   Widget build(BuildContext context) => _ElixirScope(
     state: this,
     pages: widget.controller.state,
-    child: NotificationListener<NavigationNotification>(
-      onNotification: _handleNavigationNotification,
-      child: Navigator(
-        // A new list, so the navigator also brings back a page a guard kept after the user closed it.
-        pages: List<Page<Object?>>.of(widget.controller.state),
-        onDidRemovePage: _handleDidRemovePage,
-        observers: _observers,
-        transitionDelegate: widget.transitionDelegate,
-        restorationScopeId: widget.restorationScopeId,
-        reportsRouteUpdateToEngine: widget.reportsRouteUpdateToEngine,
+    // Always in the tree, even without a listener: adding one later would remount the navigator.
+    child: NotificationListener<ElixirNotification>(
+      onNotification: _handleNestedChange,
+      child: NotificationListener<NavigationNotification>(
+        onNotification: _handleNavigationNotification,
+        child: Navigator(
+          // A new list, so the navigator also brings back a page a guard kept after the user closed it.
+          pages: List<Page<Object?>>.of(widget.controller.state),
+          onDidRemovePage: _handleDidRemovePage,
+          observers: _observers,
+          transitionDelegate: widget.transitionDelegate,
+          restorationScopeId: widget.restorationScopeId,
+          reportsRouteUpdateToEngine: widget.reportsRouteUpdateToEngine,
+        ),
       ),
     ),
   );

@@ -38,10 +38,8 @@ class _AppState extends State<App> {
   void setThemeMode(ThemeMode mode) => setState(() => _themeMode = mode);
 
   /// Every change of every Elixir, nested ones included, bubbles up to here.
-  bool _log(ElixirNotification notification) {
-    log('${notification.controller.name?.alias}: ${notification.next.join(' > ')}', name: 'elixir');
-    return false;
-  }
+  void _log(ElixirNotification notification) =>
+      log('${notification.controller.name?.alias}: ${notification.next.join(' > ')}', name: 'elixir');
 
   static const PageTransitionsTheme _transitions = PageTransitionsTheme(
     builders: <TargetPlatform, PageTransitionsBuilder>{
@@ -63,9 +61,6 @@ class _AppState extends State<App> {
     theme: ThemeData(brightness: Brightness.light, pageTransitionsTheme: _transitions),
     darkTheme: ThemeData(brightness: Brightness.dark, pageTransitionsTheme: _transitions),
     themeMode: _themeMode,
-    builder: (context, _) => NotificationListener<ElixirNotification>(
-      onNotification: _log,
-      child: Elixir(controller: _controller),
-    ),
+    builder: (context, _) => Elixir(controller: _controller, listener: _log),
   );
 }

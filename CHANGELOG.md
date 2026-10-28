@@ -7,8 +7,9 @@ adapter. See "Migrating from 0.4" in the README.
   `Elixir(pages:)`; `Elixir` now takes `controller` only. `context.elixir` returns the controller
 - **Breaking:** guards move to the controller and become `ElixirGuard` objects with `call(from, to)`; they no longer
   receive a `BuildContext`. `revalidate` moves to the controller as well
-- **Breaking:** `ElixirObserver`, `ElixirObserver$NavigatorImpl`, `ElixirListener` and the `listeners` parameter are
-  removed; listen to the `ElixirNotification` that every change bubbles up the tree
+- **Breaking:** `ElixirObserver` and `ElixirObserver$NavigatorImpl` are removed, and `listeners` becomes `listener`:
+  every change bubbles up the tree as an `ElixirNotification`, and `listener` (an `ElixirListener`) hears the changes
+  of its Elixir and of the nested ones, like `listeners` did
 - **Breaking:** `onBackButtonPressed` is `Future<bool> Function(NavigatorState navigator)`; by default the back button
   calls `navigator.maybePop()`, so dialogs and `PopScope` are respected and the root page lets the app close
 - **Breaking:** `ElixirPage` extends `Page<Object?>`, takes no `name`, has optional `tags`, compares by identity, and

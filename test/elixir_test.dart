@@ -286,7 +286,7 @@ void main() {
       expect(seen, ['scope: + -c', 'a: +d -']);
     });
 
-    testWidgets('a throwing listener is reported and the change is still shown', (tester) async {
+    testWidgets('a throwing NotificationListener is reported and the change is still shown', (tester) async {
       final controller = controllerOf([a]);
       await pumpApp(
         tester,
@@ -301,6 +301,51 @@ void main() {
 
       expect(tester.takeException(), isA<StateError>());
       expect(find.text('b'), findsOneWidget);
+    });
+
+    testWidgets('Elixir.listener hears its own Elixir and the nested ones', (tester) async {
+      String describe(ElixirNotification n) => '${n.controller.name?.alias}: ${n.next.join(' > ')}';
+      final outerSeen = <String>[];
+      final innerSeen = <String>[];
+      final inner = controllerOf([b, c], name: Alias.scope);
+      final outer = controllerOf([
+        a,
+        TestPage(
+          Alias.scope,
+          child: Elixir(controller: inner, listener: (n) => innerSeen.add(describe(n))),
+        ),
+      ], name: Alias.a);
+      await pumpApp(tester, Elixir(controller: outer, listener: (n) => outerSeen.add(describe(n))));
+
+      inner.pop();
+      await tester.pumpAndSettle();
+      outer.push(d);
+      await tester.pumpAndSettle();
+
+      expect(outerSeen, ['scope: b', 'a: a > scope > d']);
+      expect(innerSeen, ['scope: b']);
+    });
+
+    testWidgets('a throwing Elixir.listener is reported and the change still bubbles up', (tester) async {
+      final seen = <String>[];
+      final inner = controllerOf([b, c], name: Alias.scope);
+      final outer = controllerOf([a, TestPage(Alias.scope, child: Elixir(controller: inner))]);
+      await pumpApp(
+        tester,
+        NotificationListener<ElixirNotification>(
+          onNotification: (n) {
+            seen.add('${n.controller.name?.alias}');
+            return false;
+          },
+          child: Elixir(controller: outer, listener: (_) => throw StateError('broken')),
+        ),
+      );
+
+      inner.pop();
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isA<StateError>());
+      expect(seen, ['scope'], reason: 'the notification passed the throwing listener of the outer Elixir');
     });
   });
 }

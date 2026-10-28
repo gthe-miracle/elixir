@@ -19,7 +19,7 @@ class SettingsDialog extends StatelessWidget {
     ),
     actions: [
       TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-      TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('OK')),
+      TextButton(onPressed: () => context.elixir.pop(true), child: const Text('OK')),
     ],
   );
 }

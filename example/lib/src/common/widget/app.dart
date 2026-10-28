@@ -4,7 +4,6 @@ import 'package:elixir/elixir.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
-import '../routes/route_state_mixin.dart';
 import '../routes/routes.dart';
 
 /// {@template app}
@@ -14,8 +13,9 @@ class App extends StatefulWidget {
   /// {@macro app}
   const App({super.key});
 
-  static ValueNotifier<ElixirNavigationState>? navigatorOf(BuildContext context) =>
-      context.findAncestorStateOfType<_AppState>()?._navigator;
+  /// The controller of the root Elixir, e.g. to leave a nested one.
+  static ElixirController controllerOf(BuildContext context) =>
+      context.findAncestorStateOfType<_AppState>()!._controller;
 
   /// Switches between light and dark theme, to compare page transitions in both.
   static void toggleThemeOf(BuildContext context) {
@@ -27,68 +27,45 @@ class App extends StatefulWidget {
   State<App> createState() => _AppState();
 }
 
-class _AppState extends State<App> with RouteStateMixin {
-  final GlobalKey<State<StatefulWidget>> _preserveKey = GlobalKey<State<StatefulWidget>>();
-
-  late ValueNotifier<ElixirNavigationState> _navigator;
+class _AppState extends State<App> {
+  late final ElixirController _controller = ElixirController(
+    [const HomePage()],
+    guards: const [RootGuard(HomePage()), ModalGuard()],
+    name: AppRoutes.app,
+  );
   ThemeMode _themeMode = ThemeMode.system;
 
   void setThemeMode(ThemeMode mode) => setState(() => _themeMode = mode);
 
-  @override
-  void initState() {
-    super.initState();
-    _navigator = ValueNotifier(initialPages);
+  /// Every change of every Elixir, nested ones included, bubbles up to here.
+  bool _log(ElixirNotification notification) {
+    log('${notification.controller.name?.alias}: ${notification.next.join(' > ')}', name: 'elixir');
+    return false;
   }
+
+  static const PageTransitionsTheme _transitions = PageTransitionsTheme(
+    builders: <TargetPlatform, PageTransitionsBuilder>{
+      TargetPlatform.android: CupertinoPageTransitionsBuilder(),
+      TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+    },
+  );
 
   @override
   void dispose() {
-    _navigator.dispose();
+    _controller.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) => MaterialApp(
-    key: _preserveKey,
     title: 'Declarative Navigation',
     debugShowCheckedModeBanner: false,
-    theme: ThemeData(
-      brightness: Brightness.light,
-      pageTransitionsTheme: const PageTransitionsTheme(
-        builders: <TargetPlatform, PageTransitionsBuilder>{
-          TargetPlatform.android: CupertinoPageTransitionsBuilder(),
-          TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
-        },
-      ),
-    ),
-    darkTheme: ThemeData(
-      brightness: Brightness.dark,
-      pageTransitionsTheme: const PageTransitionsTheme(
-        builders: <TargetPlatform, PageTransitionsBuilder>{
-          TargetPlatform.android: CupertinoPageTransitionsBuilder(),
-          TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
-        },
-      ),
-    ),
+    theme: ThemeData(brightness: Brightness.light, pageTransitionsTheme: _transitions),
+    darkTheme: ThemeData(brightness: Brightness.dark, pageTransitionsTheme: _transitions),
     themeMode: _themeMode,
-    builder:
-        (context, _) => Elixir.controlled(
-          listeners: [
-            (ElixirState elixir, ElixirNavigationState previous, ElixirNavigationState next) {
-              setState(() {});
-              log('\n =========== ${AppRoutes.app.alias} ================================ ');
-              log(elixir.name?.alias ?? '');
-              log(next.join());
-              log(' ================================================ \n');
-            },
-          ],
-          name: AppRoutes.app,
-          controller: _navigator,
-          guards: guards,
-          onBackButtonPressed: (state) {
-            log('onBackButtonPressed: $state');
-            return (handled: true, state: (state..removeLast()).toList());
-          },
-        ),
+    builder: (context, _) => NotificationListener<ElixirNotification>(
+      onNotification: _log,
+      child: Elixir(controller: _controller),
+    ),
   );
 }

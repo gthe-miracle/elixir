@@ -1,12 +1,21 @@
 name: elixir
-description: "A new Flutter package project."
-version: 0.4.0
+description: "Declarative Navigator 2.0 navigation for Flutter. The navigation state is a list of pages, guarded by pure rules and owned by one controller."
+version: 0.5.0
 
 homepage: https://github.com/Miracle-Blue/elixir
+repository: https://github.com/Miracle-Blue/elixir
+issue_tracker: https://github.com/Miracle-Blue/elixir/issues
+
+topics:
+  - navigation
+  - navigator
+  - router
+  - declarative
+  - guards
 
 environment:
   sdk: ^3.9.1
-  flutter: ">=1.17.0"
+  flutter: ">=3.35.0"
 
 dependencies:
   flutter:

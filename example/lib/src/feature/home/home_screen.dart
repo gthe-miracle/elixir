@@ -1,45 +1,15 @@
-import 'dart:developer';
-
 import 'package:elixir/elixir.dart';
 import 'package:flutter/material.dart';
 
 import '../../common/routes/routes.dart';
 import '../../common/widget/app.dart';
 
-ElixirObserver? elixirStateObserver;
-
 /// {@template home_screen}
 /// HomeScreen widget.
 /// {@endtemplate}
-class HomeScreen extends StatefulWidget {
+class HomeScreen extends StatelessWidget {
   /// {@macro home_screen}
   const HomeScreen({super.key});
-
-  @override
-  State<HomeScreen> createState() => _HomeScreenState();
-}
-
-class _HomeScreenState extends State<HomeScreen> {
-  void updateUI(ElixirState elixir, ElixirNavigationState previous, ElixirNavigationState next) {
-    setState(() {});
-    log('\n =========== Global Listener ================================ ');
-    log(elixir.name?.alias ?? '');
-    log(next.join());
-    log(' ================================================ \n');
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    elixirStateObserver = context.elixir.observer;
-    elixirStateObserver?.addListener(updateUI);
-  }
-
-  @override
-  void dispose() {
-    elixirStateObserver?.removeListener(updateUI);
-    super.dispose();
-  }
 
   @override
   Widget build(BuildContext context) => Scaffold(
@@ -52,11 +22,11 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         IconButton(
           icon: const Icon(Icons.settings),
-          onPressed:
-              () => App.navigatorOf(context)?.change((state) => [...state, SettingsScopePage(data: 'Data from home')]),
+          onPressed: () => context.elixir.push(SettingsScopePage(data: 'Data from home')),
         ),
       ],
     ),
-    body: const SafeArea(child: Center(child: Text('Home'))),
+    // Elixir.stackOf rebuilds this text on every change of the root Elixir.
+    body: SafeArea(child: Center(child: Text('Pages: ${context.elixir.state.join(' > ')}'))),
   );
 }

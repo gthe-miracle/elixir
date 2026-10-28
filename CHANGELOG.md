@@ -1,3 +1,34 @@
+## 0.5.0
+
+A new architecture: one controller owns the navigation state, guards are pure rules, and the `Elixir` widget is a thin
+adapter. See "Migrating from 0.4" in the README.
+
+- **Breaking:** `ElixirController` replaces `ValueNotifier<ElixirNavigationState>`, `Elixir.controlled` and
+  `Elixir(pages:)`; `Elixir` now takes `controller` only. `context.elixir` returns the controller
+- **Breaking:** guards move to the controller and become `ElixirGuard` objects with `call(from, to)`; they no longer
+  receive a `BuildContext`. `revalidate` moves to the controller as well
+- **Breaking:** `ElixirObserver`, `ElixirObserver$NavigatorImpl`, `ElixirListener` and the `listeners` parameter are
+  removed; listen to the `ElixirNotification` that every change bubbles up the tree
+- **Breaking:** `onBackButtonPressed` is `Future<bool> Function(NavigatorState navigator)`; by default the back button
+  calls `navigator.maybePop()`, so dialogs and `PopScope` are respected and the root page lets the app close
+- **Breaking:** `ElixirPage` extends `Page<Object?>`, takes no `name`, has optional `tags`, compares by identity, and
+  its default key is `name?a=1&b` built from the argument values instead of their identity hash
+- **Breaking:** `reset()` takes no argument and returns to the initial state; `popUntil` stops at the topmost page with
+  the alias; `Elixir.stateOf`, `Elixir.navigatorOf` and `ElixirControllerExtension` are removed
+- **Breaking:** the navigator no longer uses the `elixir_navigator` restoration scope by default; pass
+  `restorationScopeId`
+- **Breaking:** `CupertinoBackGestureDetector` and `CupertinoBackGestureController` moved out of the package into the
+  example (`example/lib/src/common/cupertino_back/`); copy them into an app that needs the swipe on a custom route
+- Added `pushForResult`, `pop(result)` and `remove(page, result)`; `Navigator.pop(context, result)` completes
+  `pushForResult` too
+- Added `ElixirDialogPage` and `ElixirSheetPage` (widgets-only, page-based), `ElixirPage.modalTag`, `RootGuard`,
+  `ModalGuard`, `ElixirPageRoute`, `Elixir.stackOf`, `removeTag`, `remove` and `context.maybeElixir`
+- Changes are deduplicated by key (the last page wins), queued when requested during a change, isolated from failing
+  guards, and notified after the frame when committed during a build
+- A page the user closed but a guard kept is shown again; the root Elixir reports `canHandlePop` for the whole tree,
+  newest nested Elixir first
+- MIT license, real pubspec metadata, `flutter: ">=3.35.0"`, CI, and tests for every behavior above
+
 ## 0.4.0
 
 - **Breaking:** `ElixirPage.createRoute` no longer defaults to `MaterialPageRoute`; every page (or a shared base page class) must implement it

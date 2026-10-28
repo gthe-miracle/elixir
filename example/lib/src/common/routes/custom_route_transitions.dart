@@ -1,12 +1,12 @@
-import 'package:elixir/elixir.dart';
 import 'package:flutter/material.dart';
 
+import '../cupertino_back/cupertino_back_gesture.dart';
 import 'routes.dart';
 
 /// {@template custom_material_route}
 /// CustomMaterialRoute widget.
 /// {@endtemplate}
-class CustomMaterialRoute extends PageRoute<void> {
+class CustomMaterialRoute extends PageRoute<Object?> {
   /// {@macro custom_material_route}
   CustomMaterialRoute({required AppPage page}) : super(settings: page);
 
@@ -43,15 +43,14 @@ class CustomMaterialRoute extends PageRoute<void> {
     context,
     animation,
     secondaryAnimation,
-    CupertinoBackGestureDetector<void>(
+    CupertinoBackGestureDetector<Object?>(
       enabledCallback: () => popGestureEnabled,
-      onStartPopGesture:
-          () => CupertinoBackGestureController<void>(
-            navigator: navigator!,
-            getIsActive: () => isActive,
-            getIsCurrent: () => isCurrent,
-            controller: controller!, // protected access
-          ),
+      onStartPopGesture: () => CupertinoBackGestureController<Object?>(
+        navigator: navigator!,
+        getIsActive: () => isActive,
+        getIsCurrent: () => isCurrent,
+        controller: controller!, // protected access
+      ),
       child: child,
     ),
   );

@@ -24,7 +24,7 @@ controller.change((state) => [...state, const SettingsPage()]);
 dependencies:
   elixir:
     git:
-      url: https://github.com/Miracle-Blue/elixir.git
+      url: https://github.com/gthe-miracle/elixir.git
 ```
 
 ## Usage
@@ -343,4 +343,4 @@ MIT, see [LICENSE](LICENSE).
 
 ## Author
 
-Created and maintained by [Miracle-Blue](https://github.com/Miracle-Blue).
+Created and maintained by [Miracle](https://github.com/gthe-miracle).

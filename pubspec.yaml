@@ -2,9 +2,9 @@ name: elixir
 description: "Declarative Navigator 2.0 navigation for Flutter. The navigation state is a list of pages, guarded by pure rules and owned by one controller."
 version: 0.5.0
 
-homepage: https://github.com/Miracle-Blue/elixir
-repository: https://github.com/Miracle-Blue/elixir
-issue_tracker: https://github.com/Miracle-Blue/elixir/issues
+homepage: https://github.com/gthe-miracle/elixir
+repository: https://github.com/gthe-miracle/elixir
+issue_tracker: https://github.com/gthe-miracle/elixir/issues
 
 topics:
   - navigation

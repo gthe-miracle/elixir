@@ -1,24 +1,24 @@
 # Elixir
 
-A declarative navigation package for Flutter built on top of Navigator 2.0. Elixir provides a clean, type-safe approach to managing navigation state as an immutable list of pages.
+Declarative Navigator 2.0 navigation for Flutter. The navigation state is a list of pages owned by one controller:
+every change goes through pure guard rules, and a thin widget renders it.
+
+```dart
+controller.change((state) => [...state, const SettingsPage()]);
+```
 
 ## Features
 
-- ✅ Declarative navigation with immutable page stack
-- ✅ Type-safe page definitions with `ElixirAlias` enum routing
-- ✅ Navigation guards for access control and state validation
-- ✅ Global and scoped navigation observers
-- ✅ Nested Elixirs with innermost-first system back button handling
+- ✅ The navigation state is a plain `List<ElixirPage>`; rewrite it and the screens follow
+- ✅ One owner, `ElixirController`, that works and tests without widgets
+- ✅ Guards: pure `(from, to) => to` rules applied to every change, re-run by a `Listenable`
+- ✅ Results: `await controller.pushForResult<bool>(page)`, completed by `pop(result)` or `Navigator.pop(context, result)`
+- ✅ Dialogs and bottom sheets as pages (`ElixirDialogPage`, `ElixirSheetPage`)
+- ✅ Nested Elixirs with innermost, newest-first system back handling and correct Android predictive back
+- ✅ One `NotificationListener` at the root hears every navigator of the app
 - ✅ No Material dependency: pages build any `Route` (Material, Cupertino or custom)
-- ✅ Custom per-page route transitions
-- ✅ iOS-style swipe-back gesture support (`CupertinoBackGestureDetector`)
-- ✅ Programmatic navigation via `ValueNotifier` controller
-- ✅ Reactive revalidation through `Listenable`
-- ✅ Built-in context extensions for ergonomic access
 
 ## Getting Started
-
-Add Elixir to your `pubspec.yaml`:
 
 ```yaml
 dependencies:
@@ -27,96 +27,86 @@ dependencies:
       url: https://github.com/Miracle-Blue/elixir.git
 ```
 
-Then run:
-
-```bash
-flutter pub get
-```
-
 ## Usage
 
-### 1. Define Route Aliases
-
-Create a route enum implementing `ElixirAlias`:
+### 1. Aliases
 
 ```dart
-enum Routes implements ElixirAlias, Comparable<Routes> {
+enum Routes implements ElixirAlias {
+  app('app'), // names the root Elixir
   home('home'),
-  settings('settings');
+  product('product'),
+  settings('settings'),
+  confirm('confirm'),
+  filters('filters');
 
-  const Routes(this.value);
-
-  final String value;
-
-  @override
-  String get alias => value;
+  const Routes(this.alias);
 
   @override
-  int compareTo(Routes other) => index.compareTo(other.index);
-
-  @override
-  String toString() => value;
+  final String alias;
 }
 ```
 
-### 2. Define Pages
+### 2. Pages
 
-Create a sealed page hierarchy extending `ElixirPage`. Each page must provide `tags`, `alias` and `createRoute` (usually once, in the base class):
+A page is an immutable value and also the `Page` given to the `Navigator`. Implement `alias` and `createRoute`, usually
+once in a sealed base page:
 
 ```dart
 @immutable
 sealed class AppPage extends ElixirPage {
-  const AppPage({required super.name, required super.child, super.arguments, super.key});
+  const AppPage({required super.child, super.arguments, super.key});
 
   @override
-  Route<void> createRoute(BuildContext context) => MaterialPageRoute(builder: (context) => child, settings: this);
+  Route<Object?> createRoute(BuildContext context) => AppPageRoute(this);
+}
+
+/// Material transitions from the theme. Page-based: a new page under the same key updates the screen.
+final class AppPageRoute extends PageRoute<Object?> with MaterialRouteTransitionMixin<Object?> {
+  AppPageRoute(AppPage page) : super(settings: page);
 
   @override
-  String toString() => '/$name${arguments.isEmpty ? '' : '~$arguments'}';
+  Widget buildContent(BuildContext context) => (settings as AppPage).child;
+
+  @override
+  bool get maintainState => true;
 }
 
 final class HomePage extends AppPage {
-  const HomePage() : super(child: const HomeScreen(), name: 'home');
+  const HomePage() : super(child: const HomeScreen());
 
   @override
-  Set<String> get tags => {'home'};
-
-  @override
-  Routes get alias => Routes.home;
+  ElixirAlias get alias => Routes.home;
 }
 
-final class SettingsPage extends AppPage {
-  SettingsPage({required String data})
-      : super(child: SettingsScreen(data: data), name: 'settings');
+final class ProductPage extends AppPage {
+  ProductPage(this.id) : super(child: ProductScreen(id: id));
+
+  final int id;
+
+  // Parameters kept in fields need their own key, otherwise every product is one screen.
+  @override
+  LocalKey get key => ValueKey<String>('product/$id');
 
   @override
-  Set<String> get tags => {'settings'};
-
-  @override
-  Routes get alias => Routes.settings;
+  ElixirAlias get alias => Routes.product;
 }
 ```
 
-### 3. Set Up the Navigator
+Without Material, `ElixirPageRoute(this)` is a widgets-only page-based route with a `transitionsBuilder` hook.
 
-Use `Elixir.controlled` with a `ValueNotifier` to manage the page stack:
+The route must be page-based: it reads `(settings as ElixirPage).child` on every build. A `MaterialPageRoute(builder:)`
+captures the first child, so a new instance of the page with the same key would never reach the screen.
+
+### 3. Controller and widget
 
 ```dart
-class App extends StatefulWidget {
-  const App({super.key});
-
-  @override
-  State<App> createState() => _AppState();
-}
-
 class _AppState extends State<App> {
-  late final ValueNotifier<ElixirNavigationState> _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = ValueNotifier([const HomePage()]);
-  }
+  late final ElixirController _controller = ElixirController(
+    [const HomePage()],
+    guards: const [RootGuard(HomePage()), ModalGuard()],
+    name: Routes.app,
+  );
 
   @override
   void dispose() {
@@ -126,270 +116,225 @@ class _AppState extends State<App> {
 
   @override
   Widget build(BuildContext context) => MaterialApp(
-        builder: (context, _) => Elixir.controlled(
-          controller: _controller,
-          guards: [
-            (context, state) => state.length > 1 ? state : [const HomePage()],
-            (context, state) => state.toSet().toList(),
-          ],
-        ),
-      );
+    builder: (context, _) => Elixir(controller: _controller),
+  );
 }
-```
-
-Alternatively, use the uncontrolled constructor for simpler setups:
-
-```dart
-Elixir(
-  pages: [const HomePage()],
-  guards: [...],
-)
 ```
 
 ### 4. Navigate
 
-Access navigation from any descendant widget via `context.elixir`:
+`context.elixir` is the controller of the closest Elixir:
 
 ```dart
-// Push a page
-context.elixir.push(SettingsPage(data: 'Hello'));
+context.elixir.push(const SettingsPage());            // a page already in the state moves to the top
+context.elixir.pop();                                  // never removes the last page
+context.elixir.popUntil(Routes.home);                  // to the topmost page with the alias
+context.elixir.removeTag('checkout');
+context.elixir.reset();                                // back to the initial state, through the guards
+context.elixir.change((state) => [state.first, ProductPage(1)]);
 
-// Pop the top page
-context.elixir.pop();
+final confirmed = await context.elixir.pushForResult<bool>(const ConfirmPage());
+```
 
-// Pop until a specific alias
-context.elixir.popUntil(Routes.home);
+Inside a page, the usual `Navigator.maybePop(context)` and `Navigator.pop(context, result)` work too: the controller
+learns about every page the user closes.
 
-// Arbitrary stack manipulation
-context.elixir.change(
-  (state) => state.where((e) => e.alias != Routes.settings).toList(),
+## Guards
+
+A guard receives the committed state `from` and the requested state `to`, and returns the state to commit. Return
+`to`, a redirect, or `from` to cancel. Guards see neither the controller nor a `BuildContext`: they are pure rules,
+testable as functions. Their dependencies go to their constructor, and `revalidate` re-runs them:
+
+```dart
+final controller = ElixirController(
+  [const HomePage()],
+  guards: [
+    const RootGuard(HomePage()),
+    ElixirGuard((from, to) => auth.isSignedIn ? to : [const SignInPage()]),
+  ],
+  revalidate: auth, // a Listenable
 );
-
-// Reset to initial pages
-context.elixir.reset();
 ```
 
-For programmatic navigation outside the widget tree (e.g. from a controller), use the `ValueNotifier` extension:
+Every change runs this pipeline:
+1. dedupe by key, keeping the last page;
+2. the guards in order;
+3. dedupe again.
+
+An empty result is reported and rejected. A result equal to the current state is ignored. A guard that throws is
+reported to `FlutterError` and skipped. A guard with state of its own implements `ElixirGuard`.
+
+Built-in guards:
+- `RootGuard(page)` keeps a page at the bottom.
+- `ModalGuard()` keeps dialogs and sheets above the screens.
+
+To stop the user from closing a page, use `PopScope`.
+
+## Dialogs and sheets
+
+A modal is a page: add a mixin to it.
 
 ```dart
-controller.change((state) => [...state, SettingsPage(data: 'data')]);
-controller.popUntil(Routes.home);
+final class ConfirmPage extends AppPage with ElixirDialogPage {
+  const ConfirmPage() : super(child: const ConfirmDialog());
+
+  @override
+  ElixirAlias get alias => Routes.confirm;
+}
+
+final class FiltersPage extends AppPage with ElixirSheetPage {
+  const FiltersPage() : super(child: const FiltersSheet());
+
+  @override
+  ElixirAlias get alias => Routes.filters;
+}
 ```
+
+Both mixins tag the page `ElixirPage.modalTag`, so `controller.removeTag(ElixirPage.modalTag)` closes every modal at
+once. Their routes are widgets-only and page-based. The mixins expose these getters:
+- `barrierDismissible`
+- `barrierColor`
+- `barrierLabel`
+- `enableDrag` (sheet only)
+
+## Observing navigation
+
+Every committed change is dispatched as an `ElixirNotification` that bubbles up through the outer Elixirs. One listener
+above the root hears every navigator:
+
+```dart
+NotificationListener<ElixirNotification>(
+  onNotification: (n) {
+    analytics.screens(n.controller.name, added: n.added, removed: n.removed);
+    return false;
+  },
+  child: Elixir(controller: controller),
+)
+```
+
+You can also watch the state directly:
+- `ElixirController` is a `ValueListenable<List<ElixirPage>>`, so it works with `ListenableBuilder` and with code
+  outside the widget tree.
+- `Elixir.stackOf(context)` rebuilds a widget on every change.
+
+## Back button
+
+The system back button goes to the visible nested Elixirs first, newest first, then to `navigator.maybePop()`. So:
+- an open dialog or sheet closes first;
+- `PopScope` is respected;
+- a nested Elixir with one page hands the press to its parent;
+- the root page lets the platform close the app.
+
+A nested Elixir under a covered route, or in a hidden `IndexedStack` tab, is skipped. The root Elixir reports one
+`canHandlePop` for the whole tree, so Android's predictive back gesture only closes the app when nothing can go back.
+
+```dart
+Elixir(
+  controller: controller,
+  onBackButtonPressed: (navigator) async {
+    if (controller.state.last.tags.contains('checkout')) {
+      controller.popUntil(Routes.home);
+      return true;
+    }
+    return navigator.maybePop();
+  },
+)
+```
+
+### iOS swipe-back gesture
+
+The example has a widgets-only port of Flutter's iOS edge swipe for custom routes: copy
+`example/lib/src/common/cupertino_back/cupertino_back_gesture.dart` and see how
+`example/lib/src/common/routes/custom_route_transitions.dart` uses it. Routes built with
+`MaterialRouteTransitionMixin` or `CupertinoRouteTransitionMixin` already get the swipe from the theme.
 
 ## Core API
 
 ### ElixirPage
 
-Abstract base class for pages. Extends Flutter's `Page<void>`.
+| Member          | Type                   | Description                                                           |
+| --------------- | ---------------------- | --------------------------------------------------------------------- |
+| `child`         | `Widget`               | The content of the page                                               |
+| `alias`         | `ElixirAlias`          | Required; usually an enum value                                       |
+| `name`          | `String`               | `alias.alias`                                                         |
+| `tags`          | `Set<String>`          | Optional marks, used by `removeTag` and `ModalGuard`                  |
+| `arguments`     | `Map<String, Object?>` | Optional; empty by default                                            |
+| `key`           | `LocalKey`             | The given key, else `name` or `name?a=1&b` (escaped)                  |
+| `createRoute()` | `Route<Object?>`       | Required; must be page-based                                          |
 
-| Member          | Type                   | Description                                                      |
-| --------------- | ---------------------- | ---------------------------------------------------------------- |
-| `child`         | `Widget`               | The widget rendered by this page                                 |
-| `name`          | `String`               | Derived from `alias.alias`                                       |
-| `tags`          | `Set<String>`          | Set of tags for page identification and filtering                |
-| `alias`         | `ElixirAlias`          | Unique route alias (typically an enum value)                     |
-| `arguments`     | `Map<String, Object?>` | Optional arguments passed to the page                            |
-| `key`           | `LocalKey`             | Auto-generated from name and arguments hash                      |
-| `createRoute()` | `Route<void>`          | Required; builds the route, e.g. `MaterialPageRoute`              |
+Pages compare by identity; the controller identifies them by `key`.
 
-### ElixirAlias
+### ElixirController
 
-An interface that route enums implement. Requires a single `String get alias` getter.
+| Member                         | Description                                                           |
+| ------------------------------ | --------------------------------------------------------------------- |
+| `ElixirController(initial, …)` | `guards`, `revalidate` (`Listenable`), `name` (`ElixirAlias`)         |
+| `state` / `value`              | The current pages, unmodifiable                                       |
+| `change(fn)`                   | Rewrites the state; every other method is a shortcut for it           |
+| `push(page)`                   | Adds a page on top, or moves its key to the top                       |
+| `pushForResult<T>(page)`       | Pushes and completes when the page leaves, with its result or `null`  |
+| `pop([result])`                | Removes the top page unless it is the last one                        |
+| `remove(page, [result])`       | Removes the page with that key                                        |
+| `popUntil(alias)`              | Removes the pages above the topmost page with the alias               |
+| `removeTag(tag)`               | Removes the pages with the tag                                        |
+| `reset()`                      | Returns to the initial state, through the guards                      |
+| `revalidate()`                 | Runs the guards on the current state again                            |
 
-### ElixirNavigationState
+A change requested while another one is committed (from a listener, for example) is queued and applied after it. After
+64 changes in a row the rest are reported and dropped.
 
-Type alias for `List<ElixirPage>` — the immutable page stack.
+### Elixir
 
-### ElixirState
+| Parameter                    | Type                         | Description                                         |
+| ---------------------------- | ---------------------------- | --------------------------------------------------- |
+| `controller`                 | `ElixirController`           | Required                                            |
+| `observers`                  | `List<NavigatorObserver>`    | Observers of the underlying `Navigator`             |
+| `transitionDelegate`         | `TransitionDelegate<Object?>`| Defaults to `DefaultTransitionDelegate`             |
+| `onBackButtonPressed`        | `ElixirBackHandler?`         | Replaces `navigator.maybePop()`                     |
+| `restorationScopeId`         | `String?`                    | Enables state restoration of the navigator          |
+| `reportsRouteUpdateToEngine` | `bool`                       | Defaults to `false`                                 |
 
-The state object exposed via `context.elixir` or `Elixir.of(context)`:
+Static access works as follows:
+- `Elixir.of(context)` and `Elixir.maybeOf(context)` return the controller, the same as `context.elixir` and
+  `context.maybeElixir`;
+- `Elixir.stackOf(context)` returns the pages and rebuilds on every change.
 
-| Method                  | Description                                             |
-| ----------------------- | ------------------------------------------------------- |
-| `push(ElixirPage)`      | Append a page to the stack                              |
-| `pop()`                 | Remove the top page                                     |
-| `popUntil(ElixirAlias)` | Pop pages until the page with the given alias is on top |
-| `change(fn)`            | Apply an arbitrary transformation to the page stack     |
-| `reset(ElixirPage)`     | Reset to the initial pages                              |
-| `revalidate()`          | Re-run all guards against the current stack             |
-| `state`                 | Current `ElixirNavigationState`                         |
-| `name`                  | Name given to this Elixir, if any                       |
-| `observer`              | `ElixirObserver` shared by the root and nested Elixirs  |
-| `navigator`             | Underlying `NavigatorState`                             |
+## Design
 
-### Static Access
+| Rule | What it means |
+| --- | --- |
+| Guards are pure business rules | They run only inside the controller, never during a build, so no change is ever committed mid-frame. |
+| Data flows one way | The controller knows no widgets. The widget renders the pages, and reports back only the pages the user closed. |
+| Back is the Navigator's back | Dialogs, `PopScope` and `Page.canPop` work without special cases. |
+| The page is the `Page` | The Navigator's own key diff keeps routes and their state. |
+| A change carries its results | A pop result travels with the change that removed the page. |
 
-```dart
-Elixir.of(context)        // ElixirState (throws if not found)
-Elixir.maybeOf(context)   // ElixirState? (returns null if not found)
-Elixir.stateOf(context)   // ElixirNavigationState?
-Elixir.navigatorOf(context) // NavigatorState?
-```
+## Migrating from 0.4
 
-### Elixir Widget Parameters
-
-| Parameter             | Type                                    | Description                                                            |
-| --------------------- | --------------------------------------- | ---------------------------------------------------------------------- |
-| `pages`               | `ElixirNavigationState`                 | Initial page stack                                                     |
-| `controller`          | `ValueNotifier<ElixirNavigationState>?` | External controller (`.controlled` constructor)                        |
-| `name`                | `ElixirAlias?`                          | Optional name to tell Elixirs apart (`elixir.name`)                    |
-| `guards`              | `ElixirGuard`                           | List of guard functions applied on every state change                  |
-| `observers`           | `List<NavigatorObserver>`               | Flutter navigator observers                                            |
-| `listeners`           | `List<ElixirListener>`                  | Called on page changes of this Elixir and all nested Elixirs           |
-| `transitionDelegate`  | `TransitionDelegate`                    | Controls transition behavior (defaults to `DefaultTransitionDelegate`) |
-| `revalidate`          | `Listenable?`                           | When notified, re-runs guards against current state                    |
-| `onBackButtonPressed` | `Function?`                             | Custom system back button handler; returns `({state, handled})`        |
-
-## Guards
-
-Guards are functions that intercept and transform every navigation state change. They run sequentially — each guard receives the output of the previous one.
-
-```dart
-guards: [
-  // Ensure at least one page
-  (context, state) => state.length > 1 ? state : [const HomePage()],
-
-  // Deduplicate pages
-  (context, state) => state.toSet().toList(),
-
-  // Auth guard
-  (context, state) {
-    if (!isAuthenticated && state.any((p) => p.tags.contains('protected')))
-      return [const LoginPage()];
-    return state;
-  },
-],
-```
-
-If guards produce an empty list or a list equal to the current state, the navigation change is rejected.
-
-## Observing Navigation
-
-The root Elixir creates one `ElixirObserver`, shared with every nested Elixir. Its listeners are called whenever any Elixir in the tree changes its pages, with the Elixir that changed:
-
-```dart
-void onChange(ElixirState elixir, ElixirNavigationState previous, ElixirNavigationState next) {
-  if (elixir.name == Scopes.settings) print('settings: $previous -> $next');
-}
-
-context.elixir.observer.addListener(onChange);    // from any Elixir, root or nested
-context.elixir.observer.removeListener(onChange);
-```
-
-To listen to one part of the tree only, pass `listeners` to that Elixir. They are called for it and every Elixir nested inside it:
-
-```dart
-Elixir(
-  listeners: [(elixir, previous, next) => print('$previous -> $next')],
-  pages: [const SettingsPage()],
-);
-```
-
-## Custom Transitions
-
-`MaterialPageRoute` animates with `ThemeData.pageTransitionsTheme`, so one theme setting changes every page:
-
-```dart
-MaterialApp(
-  theme: ThemeData(
-    pageTransitionsTheme: const PageTransitionsTheme(
-      builders: {
-        TargetPlatform.android: CupertinoPageTransitionsBuilder(),
-        TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
-      },
-    ),
-  ),
-)
-```
-
-For a single page, override `createRoute()` on it:
-
-```dart
-final class SettingsPage extends AppPage {
-  SettingsPage({required String data})
-      : super(child: SettingsScreen(data: data), name: 'settings');
-
-  @override
-  Route<void> createRoute(BuildContext context) => CustomMaterialRoute(page: this);
-
-  @override
-  Set<String> get tags => {'settings'};
-
-  @override
-  Routes get alias => Routes.settings;
-}
-```
-
-### iOS Swipe-Back Gesture
-
-Elixir ships `CupertinoBackGestureDetector` and `CupertinoBackGestureController` for adding iOS-style edge-swipe navigation to custom routes:
-
-```dart
-class CustomMaterialRoute extends PageRoute<void> {
-  CustomMaterialRoute({required AppPage page}) : super(settings: page);
-
-  AppPage get page => settings as AppPage;
-
-  @override
-  bool get popGestureEnabled => true;
-
-  @override
-  Widget buildTransitions(
-    BuildContext context,
-    Animation<double> animation,
-    Animation<double> secondaryAnimation,
-    Widget child,
-  ) => const ZoomPageTransitionsBuilder().buildTransitions(
-    this, context, animation, secondaryAnimation,
-    CupertinoBackGestureDetector<void>(
-      enabledCallback: () => popGestureEnabled,
-      onStartPopGesture: () => CupertinoBackGestureController<void>(
-        navigator: navigator!,
-        getIsActive: () => isActive,
-        getIsCurrent: () => isCurrent,
-        controller: controller!,
-      ),
-      child: child,
-    ),
-  );
-
-  @override
-  bool get maintainState => true;
-  @override
-  Color? get barrierColor => null;
-  @override
-  String? get barrierLabel => null;
-  @override
-  Duration get transitionDuration => const Duration(milliseconds: 300);
-  @override
-  Widget buildPage(BuildContext context, Animation<double> animation,
-      Animation<double> secondaryAnimation) => page.child;
-}
-```
-
-## Back Button Handling
-
-Customize system back button behavior with `onBackButtonPressed`:
-
-```dart
-Elixir.controlled(
-  controller: _controller,
-  onBackButtonPressed: (state) => (
-    handled: true,
-    state: (state..removeLast()).toList(),
-  ),
-)
-```
-
-Return `handled: true` to consume the event, or `handled: false` to let the system handle it.
+| 0.4 | 0.5 |
+| --- | --- |
+| `ValueNotifier<ElixirNavigationState>` + `Elixir.controlled(controller:)` / `Elixir(pages:)` | `ElixirController(pages, guards:, revalidate:, name:)` + `Elixir(controller:)` |
+| `guards: [(context, state) => …]` on the widget | `guards: [ElixirGuard((from, to) => …)]` on the controller; read dependencies when you create the controller |
+| `state.toSet().toList()` guard | Built in: the last page of each key wins |
+| `context.elixir` → `ElixirState` | `context.elixir` → `ElixirController` |
+| `observer.addListener((elixir, previous, next) {})`, `listeners:` | `NotificationListener<ElixirNotification>` |
+| `onBackButtonPressed: (state) => (state:, handled:)` | `onBackButtonPressed: (navigator) async => …` |
+| `super(name: …, child: …)`, required `tags`, `==` override | `super(child: …)`; `tags` optional; no `==` override |
+| `Route<void> createRoute` with `MaterialPageRoute(builder:)` | `Route<Object?> createRoute` with a page-based route |
+| `reset(page)` | `reset()` |
+| `Elixir.stateOf` / `Elixir.navigatorOf` | `Elixir.stackOf` / `Navigator.of(pageContext)` |
 
 ## Example
 
-See the [example](example/) directory for a complete working application.
+See [example/](example/) for an app with:
+- a nested Elixir;
+- a dialog page that returns a result;
+- a sheet page;
+- a custom swipe-back route.
 
 ## License
 
-This package is licensed under the terms specified in the LICENSE file.
+MIT, see [LICENSE](LICENSE).
 
 ## Author
 

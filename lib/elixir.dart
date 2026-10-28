@@ -1,15 +1,19 @@
-/// Declarative Navigator 2.0 navigation built on widgets only (no Material dependency).
+/// Declarative Navigator 2.0 navigation built on widgets only.
+///
+/// The navigation state is a list of pages owned by an [ElixirController]: every change goes through its guards, and
+/// an [Elixir] widget renders it.
 /// ```dart
 /// import 'package:elixir/elixir.dart';
 ///
-/// context.elixir.push(page);
-/// context.elixir.change((state) => [...state, page]);
-/// context.elixir.popUntil(Routes.settings);
+/// context.elixir.push(const SettingsPage());
+/// context.elixir.change((state) => [...state, const SettingsPage()]);
+/// context.elixir.popUntil(Routes.home);
 /// ```
 library;
 
-export 'src/cupertino_back/cupertino_back_gesture.dart';
-export 'src/navigator/elixir_page.dart';
+export 'src/navigator/controller.dart';
+export 'src/navigator/guard.dart';
+export 'src/navigator/modal.dart';
 export 'src/navigator/navigator.dart';
-export 'src/navigator/observer.dart';
-export 'src/util/context_extension.dart';
+export 'src/navigator/page.dart';
+export 'src/util/extension.dart';

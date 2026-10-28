@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 
 import '../../common/routes/routes.dart';
 import '../../common/widget/app.dart';
-import 'settings_scope.dart';
 
 /// {@template settings_screen}
 /// SettingsScreen widget.
@@ -19,25 +18,21 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  @override
-  void initState() {
-    super.initState();
-  }
+  bool? _result;
 
-  @override
-  void dispose() {
-    super.dispose();
+  Future<void> _openDialog() async {
+    final result = await context.elixir.pushForResult<bool>(const SettingsDialogPage());
+    if (mounted) setState(() => _result = result);
   }
 
   @override
   Widget build(BuildContext context) => Scaffold(
     backgroundColor: Colors.cyan,
     appBar: AppBar(
+      // The settings Elixir has a single page: leave it through the root one.
       leading: IconButton(
         icon: const Icon(Icons.arrow_back),
-        onPressed:
-            () =>
-                App.navigatorOf(context)?.change((state) => state.where((e) => e.alias != AppRoutes.settings).toList()),
+        onPressed: () => App.controllerOf(context).popUntil(AppRoutes.home),
       ),
       title: const Text('Settings'),
     ),
@@ -47,11 +42,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Text('data: ${widget.data}'),
-            TextButton(
-              onPressed:
-                  () => SettingsScope.navigatorOf(context).change((state) => [...state, const SettingsDialogPage()]),
-              child: const Text('Open Settings Dialog'),
-            ),
+            Text('Dialog result: $_result'),
+            TextButton(onPressed: _openDialog, child: const Text('Open dialog')),
+            TextButton(onPressed: () => context.elixir.push(const AboutSheetPage()), child: const Text('Open sheet')),
           ],
         ),
       ),

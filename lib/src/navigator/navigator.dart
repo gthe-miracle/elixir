@@ -1,343 +1,417 @@
-import 'dart:collection';
-
 import 'package:flutter/foundation.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 
-import 'elixir_page.dart';
-import 'observer.dart';
+import 'controller.dart';
+import 'page.dart';
 
-/// Type definition for the navigation state.
-typedef ElixirNavigationState = List<ElixirPage>;
+/// Handles the system back button instead of `navigator.maybePop()`; returns whether the press was handled.
+typedef ElixirBackHandler = Future<bool> Function(NavigatorState navigator);
 
-/// Type definition for the guard.
-typedef ElixirGuard = List<ElixirNavigationState Function(BuildContext context, ElixirNavigationState state)>;
-
-/// {@template navigator}
-/// AppNavigator widget.
+/// {@template elixir}
+/// Renders an [ElixirController] with a [Navigator].
+///
+/// The widget is a thin adapter: it shows the pages of the controller, reports the pages the user closed (a swipe, a
+/// barrier tap, `Navigator.pop(context, result)`) back with `controller.remove`, and handles the system back button.
+/// ```dart
+/// MaterialApp(builder: (context, _) => Elixir(controller: controller));
+/// ```
+///
+/// Every committed change is dispatched as an [ElixirNotification], which bubbles up through the outer Elixirs: one
+/// [NotificationListener] above the root Elixir hears every navigator of the app.
+///
+/// The back button goes to the visible nested Elixirs first, the newest first, then to [onBackButtonPressed], by
+/// default `navigator.maybePop()`. So a dialog or a sheet on top closes first, `PopScope` is respected, and the last
+/// page lets the platform close the app. A nested Elixir is visible while its route is current and it is not hidden
+/// by a [Visibility], e.g. an inactive tab of an [IndexedStack].
 /// {@endtemplate}
 class Elixir extends StatefulWidget {
-  /// {@macro navigator}
-  Elixir({
-    required this.pages,
-    this.name,
-    this.guards = const [],
-    this.observers = const [],
-    this.listeners = const [],
+  /// {@macro elixir}
+  const Elixir({
+    required this.controller,
+    this.observers = const <NavigatorObserver>[],
     this.transitionDelegate = const DefaultTransitionDelegate<Object?>(),
-    this.revalidate,
     this.onBackButtonPressed,
+    this.restorationScopeId,
+    this.reportsRouteUpdateToEngine = false,
     super.key,
-  }) : assert(pages.isNotEmpty, 'pages cannot be empty'),
-       controller = null;
+  });
 
-  /// {@macro navigator}
-  Elixir.controlled({
-    required ValueNotifier<ElixirNavigationState> this.controller,
-    this.name,
-    this.guards = const [],
-    this.observers = const [],
-    this.listeners = const [],
-    this.transitionDelegate = const DefaultTransitionDelegate<Object?>(),
-    this.revalidate,
-    this.onBackButtonPressed,
-    super.key,
-  }) : assert(controller.value.isNotEmpty, 'controller cannot be empty'),
-       pages = controller.value;
+  /// The owner of the pages.
+  final ElixirController controller;
 
-  /// The [AppNavigatorState] from the closest instance of this class
-  /// that encloses the given context, if any.
-  static ElixirState? maybeOf(BuildContext context, {bool listen = false}) =>
-      _InheritedElixir.maybeOf(context, listen: listen)?.state;
-
-  /// The state from the closest instance of this class
-  /// that encloses the given context.
-  /// e.g. `ElixirState.of(context)`
-  static ElixirState of(BuildContext context, {bool listen = false}) =>
-      _InheritedElixir.of(context, listen: listen).state;
-
-  /// The navigation state from the closest instance of this class
-  /// that encloses the given context, if any.
-  static ElixirNavigationState? stateOf(BuildContext context, {bool listen = false}) =>
-      maybeOf(context, listen: listen)?.state;
-
-  /// The navigator from the closest instance of this class
-  /// that encloses the given context, if any.
-  static NavigatorState? navigatorOf(BuildContext context, {bool listen = false}) =>
-      maybeOf(context, listen: listen)?.navigator;
-
-  /// Initial pages to display.
-  final ElixirNavigationState pages;
-
-  /// The controller to use for the navigator.
-  final ValueNotifier<ElixirNavigationState>? controller;
-
-  /// Optional name to tell Elixirs apart, e.g. in listeners: `elixir.name == Scopes.settings`.
-  final ElixirAlias? name;
-
-  /// Guards to apply to the pages.
-  final ElixirGuard guards;
-
-  /// Observers to attach to the navigator.
+  /// Observers of the underlying [Navigator].
   final List<NavigatorObserver> observers;
 
-  /// Called after this Elixir or any Elixir nested inside it changes its pages.
-  final List<ElixirListener> listeners;
-
-  /// The transition delegate to use for the navigator.
+  /// Decides how the routes are animated when the pages change.
   final TransitionDelegate<Object?> transitionDelegate;
 
-  /// Revalidate the pages.
-  final Listenable? revalidate;
+  /// Replaces the default reaction to the back button, `navigator.maybePop()`.
+  ///
+  /// Called only when the press reaches this Elixir: no visible nested Elixir has handled it.
+  /// ```dart
+  /// onBackButtonPressed: (navigator) async {
+  ///   if (controller.state.last.tags.contains('checkout')) {
+  ///     controller.popUntil(Routes.cart);
+  ///     return true;
+  ///   }
+  ///   return navigator.maybePop();
+  /// },
+  /// ```
+  final ElixirBackHandler? onBackButtonPressed;
 
-  /// The callback function that will be called when the back button is pressed.
-  ///
-  /// It must return a boolean with true if this navigator will handle the request;
-  /// otherwise, return a boolean with false.
-  ///
-  /// Also you can mutate the [AppNavigationState] to change the navigation stack.
-  ///
-  /// Nested Elixirs are asked first (innermost active one wins).
-  /// A nested Elixir with a single page, or one returning `handled: false`,
-  /// passes the back press to its parent Elixir.
-  final ({ElixirNavigationState state, bool handled}) Function(ElixirNavigationState state)? onBackButtonPressed;
+  /// Restores the state of the navigator when given, see [Navigator.restorationScopeId].
+  final String? restorationScopeId;
+
+  /// Whether the navigator reports the route changes to the engine, e.g. to the browser address bar.
+  final bool reportsRouteUpdateToEngine;
+
+  /// The controller of the closest Elixir above [context], if any.
+  static ElixirController? maybeOf(BuildContext context) =>
+      context.getInheritedWidgetOfExactType<_ElixirScope>()?.state.widget.controller;
+
+  /// The controller of the closest Elixir above [context].
+  static ElixirController of(BuildContext context) => maybeOf(context) ?? _notFound();
+
+  /// The pages of the closest Elixir above [context]; the widget is rebuilt when they change.
+  static ElixirNavigationState stackOf(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<_ElixirScope>()?.pages ?? _notFound();
+
+  static Never _notFound() => throw FlutterError('No Elixir found above this context.');
 
   @override
-  State<Elixir> createState() => ElixirState();
+  State<Elixir> createState() => _ElixirState();
 }
 
-/// State for widget AppNavigator.
-class ElixirState extends State<Elixir> with WidgetsBindingObserver {
-  /// The current [Navigator] state (null if not yet built).
-  NavigatorState? get navigator => _navigatorObserver.navigator;
-  final NavigatorObserver _navigatorObserver = NavigatorObserver();
+class _ElixirState extends State<Elixir> with WidgetsBindingObserver {
+  /// The Elixirs that take the back button from the binding: they are not nested into another Elixir.
+  static final Set<_ElixirState> _roots = <_ElixirState>{};
 
-  /// Created only by the root Elixir, see [_rootObserver].
-  late final ElixirObserver$NavigatorImpl _observer = ElixirObserver$NavigatorImpl();
+  late final _Tracker _tracker = _Tracker((key, result) => _popped[key] = result);
 
-  /// The observer shared by the root Elixir and all nested Elixirs.
-  /// For example: `context.elixir.observer`.
-  ElixirObserver get observer => _rootObserver;
-  ElixirObserver$NavigatorImpl get _rootObserver => _parent?._rootObserver ?? _observer;
+  /// The results given to `Navigator.pop`, waiting for [_handleDidRemovePage].
+  final Map<LocalKey, Object?> _popped = <LocalKey, Object?>{};
 
-  /// The current pages list.
-  ElixirNavigationState get state => _state;
+  late List<NavigatorObserver> _observers;
+  late ElixirNavigationState _last;
 
-  /// The name given to this Elixir, if any.
-  ElixirAlias? get name => widget.name;
+  _ElixirState? _parent;
 
-  late ElixirNavigationState _state;
-  List<NavigatorObserver> _observers = const [];
+  /// The nested Elixirs, in the order they were mounted.
+  final List<_ElixirState> _children = <_ElixirState>[];
 
-  /// The closest ancestor Elixir, null for the root one.
-  ElixirState? _parent;
+  /// The navigator a root Elixir is shown in, e.g. the one of a `MaterialApp`.
+  NavigatorState? _host;
 
-  /// Nested Elixirs registered under this one.
-  final Set<ElixirState> _children = <ElixirState>{};
+  /// The route of the outer navigator this Elixir is shown in.
+  ModalRoute<Object?>? _route;
+  bool _shown = true;
+  bool _reportScheduled = false;
 
   /* #region Lifecycle */
   @override
   void initState() {
     super.initState();
-    _state = widget.pages;
-    widget.revalidate?.addListener(revalidate);
-
-    _observers = <NavigatorObserver>[_navigatorObserver, ...widget.observers];
-    widget.controller?.addListener(_controllerListener);
-    _controllerListener();
-    WidgetsBinding.instance.addObserver(this);
+    _observers = <NavigatorObserver>[_tracker, ...widget.observers];
+    _last = widget.controller.state;
+    widget.controller.addListener(_handleChange);
+    _register();
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Our own _InheritedElixir is below this context, so this finds the ancestor.
-    final parent = Elixir.maybeOf(context, listen: true);
-    if (!identical(parent, _parent)) {
-      _parent?._children.remove(this);
-      _parent = parent?.._children.add(this);
-    }
-    revalidate();
+    // Only the back button depends on these: the guards never run here.
+    _route = ModalRoute.of(context);
+    _shown = Visibility.of(context);
+    _reportBackButton();
   }
 
   @override
   void didUpdateWidget(covariant Elixir oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (!identical(widget.revalidate, oldWidget.revalidate)) {
-      oldWidget.revalidate?.removeListener(revalidate);
-      widget.revalidate?.addListener(revalidate);
-    }
     if (!identical(widget.observers, oldWidget.observers)) {
-      _observers = <NavigatorObserver>[_navigatorObserver, ...widget.observers];
+      _observers = <NavigatorObserver>[_tracker, ...widget.observers];
     }
     if (!identical(widget.controller, oldWidget.controller)) {
-      oldWidget.controller?.removeListener(_controllerListener);
-      widget.controller?.addListener(_controllerListener);
-      _controllerListener();
+      oldWidget.controller.removeListener(_handleChange);
+      widget.controller.addListener(_handleChange);
+      _last = widget.controller.state;
+      _popped.clear();
     }
+    _reportBackButton();
+  }
+
+  @override
+  void activate() {
+    super.activate();
+    _register();
+    _reportBackButton();
+  }
+
+  @override
+  void deactivate() {
+    final parent = _parent;
+    _unregister();
+    // The Elixirs left behind may be the ones handling the back button now.
+    (parent ?? _roots.firstOrNull)?._reportBackButton();
+    if (parent == null && _roots.isEmpty) _reportNoElixirLeft();
+    super.deactivate();
   }
 
   @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    _parent?._children.remove(this);
-    widget.controller?.removeListener(_controllerListener);
-    widget.revalidate?.removeListener(revalidate);
+    widget.controller.removeListener(_handleChange);
     super.dispose();
   }
   /* #endregion */
 
-  /// Add a page to the stack.
-  void push(ElixirPage page) => change((state) => [...state, page]);
+  void _handleChange() {
+    final previous = _last;
+    final next = _last = widget.controller.state;
+    if (!mounted || identical(previous, next)) return;
+    setState(() {});
+    try {
+      ElixirNotification(widget.controller, previous, next).dispatch(context);
+    } on Object catch (error, stackTrace) {
+      FlutterError.reportError(
+        FlutterErrorDetails(
+          exception: error,
+          stack: stackTrace,
+          library: 'elixir',
+          context: ErrorDescription('while dispatching an ElixirNotification of ${widget.controller}'),
+        ),
+      );
+    }
+  }
 
-  /// Pop the last page from the stack.
-  void pop() => change((state) {
-    if (state.isNotEmpty) state.removeLast();
-    return state;
-  });
+  /// Called by the [Navigator] for a page the user or the framework closed.
+  void _handleDidRemovePage(Page<Object?> page) {
+    if (page is! ElixirPage) return;
+    final controller = widget.controller..remove(page, _popped.remove(page.key));
+    // A guard has kept the page that the navigator already dropped: build it again.
+    if (mounted && controller.state.any((other) => other.key == page.key)) setState(() {});
+  }
 
-  /// PopUntil the last page with the given tag.
-  void popUntil(ElixirAlias tag) => change(
-    (state) => [
-      ...state.takeWhile((page) => page.alias != tag),
-      ?state.skipWhile((page) => page.alias != tag).firstOrNull,
-    ],
-  );
+  /* #region Back button */
+  void _register() {
+    if (context.getInheritedWidgetOfExactType<_ElixirScope>()?.state case final parent?) {
+      _parent = parent.._children.add(this);
+    } else {
+      _host = Navigator.maybeOf(context);
+      _roots.add(this);
+      WidgetsBinding.instance.addObserver(this);
+    }
+  }
 
-  /// Clear the pages to the initial state.
-  void reset(ElixirPage page) => change((_) => widget.pages);
+  void _unregister() {
+    if (_parent case final parent?) {
+      parent._children.remove(this);
+      _parent = null;
+    } else {
+      _roots.remove(this);
+      WidgetsBinding.instance.removeObserver(this);
+    }
+  }
 
-  // Only the root Elixir answers the binding; it dispatches to nested ones.
   @override
-  Future<bool> didPopRoute() => SynchronousFuture(_parent == null && _handleBackButton());
+  Future<bool> didPopRoute() => _visible ? _handleBackButton() : SynchronousFuture<bool>(false);
 
-  /// Whether this Elixir is in the parent's top route and not a hidden tab.
-  bool get _isActive => mounted && (ModalRoute.isCurrentOf(context) ?? true) && Visibility.of(context);
+  bool get _visible => mounted && _shown && (_route?.isCurrent ?? true);
 
-  /// Active nested Elixirs handle the back press first, then this one.
-  bool _handleBackButton() {
-    for (final child in _children) {
-      if (child._isActive && child._handleBackButton()) return true;
+  Future<bool> _handleBackButton() async {
+    for (final child in _children.reversed.toList(growable: false)) {
+      if (child._visible && await child._handleBackButton()) return true;
     }
+    final navigator = _tracker.navigator;
+    if (!mounted || navigator == null) return false;
+    return (widget.onBackButtonPressed ?? _maybePop)(navigator);
+  }
 
-    // A nested Elixir with a single page defers to its parent.
-    if (_parent != null && _state.length < 2) return false;
+  static Future<bool> _maybePop(NavigatorState navigator) => navigator.maybePop();
 
-    // If the back button handler is defined, call it.
-    final backButtonHandler = widget.onBackButtonPressed;
-    if (backButtonHandler != null) {
-      final result = backButtonHandler(_state.toList());
-      change((pages) => result.state);
-      return result.handled;
-    }
+  /// Whether a press reaching this Elixir would be handled, decided the way [_handleBackButton] does it.
+  bool get _canHandlePop {
+    if (!_visible) return false;
+    if (_children.any((child) => child._canHandlePop) || widget.onBackButtonPressed != null) return true;
+    final navigator = _tracker.navigator;
+    return navigator != null && (navigator.canPop() || _tracker.top?.popDisposition == RoutePopDisposition.doNotPop);
+  }
 
-    // Otherwise, handle the back button press with the default behavior.
-    if (_state.length < 2) return false;
-    _onDidRemovePage(_state.last);
+  /// The navigators report only themselves, so a nested one and its parent overwrite each other's report: swallow
+  /// them, and let the roots report for the whole tree.
+  bool _handleNavigationNotification(NavigationNotification notification) {
+    _reportBackButton();
     return true;
   }
 
-  void _setStateToController() {
-    if (widget.controller case ValueNotifier<ElixirNavigationState> controller) {
-      controller
-        ..removeListener(_controllerListener)
-        ..value = _state
-        ..addListener(_controllerListener);
-    }
+  /// Tells the platform whether the app handles the back button; without it, the predictive back gesture of Android
+  /// closes the app without ever calling [didPopRoute].
+  void _reportBackButton() {
+    // The navigators report from the post frame callbacks: answer in the same frame.
+    if (SchedulerBinding.instance.schedulerPhase == SchedulerPhase.postFrameCallbacks) return _dispatchBackButton();
+    if (_reportScheduled) return;
+    _reportScheduled = true;
+    SchedulerBinding.instance
+      ..addPostFrameCallback((_) {
+        _reportScheduled = false;
+        _dispatchBackButton();
+      }, debugLabel: 'Elixir.reportBackButton')
+      ..ensureVisualUpdate();
   }
 
-  /// Applies [next] and notifies scoped listeners and the global observer.
-  void _updateState(ElixirNavigationState next) {
-    final previous = _state;
-    _state = UnmodifiableListView<ElixirPage>(next);
-    _setStateToController();
-    setState(() {});
-    // Scoped listeners of this Elixir and its ancestors; the Set calls a shared one once.
-    final listeners = {for (ElixirState? e = this; e != null; e = e._parent) ...e.widget.listeners};
-    for (final listener in listeners) {
-      listener(this, previous, _state);
-    }
-    _rootObserver.notify(this, previous, _state);
-  }
-
-  void _controllerListener() {
-    final controller = widget.controller;
-    if (controller == null || !mounted) return;
-    final newValue = controller.value;
-    if (identical(newValue, _state)) return;
-    final ctx = context;
-    final next = widget.guards.fold(newValue.toList(), (s, g) => g(ctx, s));
-    if (next.isEmpty || listEquals(next, _state)) {
-      _setStateToController(); // Revert the controller value.
-    } else {
-      _updateState(next);
-    }
-  }
-
-  /// Revalidate the pages.
-  void revalidate() {
+  void _dispatchBackButton() {
     if (!mounted) return;
-    final ctx = context;
-    final next = widget.guards.fold(_state.toList(), (s, g) => g(ctx, s));
-    if (next.isEmpty || listEquals(next, _state)) return;
-    _updateState(next);
+    if (_parent case final parent?) return parent._dispatchBackButton();
+    // Deactivated, e.g. while it moves with a global key.
+    if (!_roots.contains(this)) return;
+    NavigationNotification(canHandlePop: _roots.any((root) => root._canHandlePop)).dispatch(context);
   }
 
-  /// Change the pages.
-  void change(ElixirNavigationState Function(ElixirNavigationState pages) fn) {
-    final prev = _state.toList();
-    var next = fn(prev);
-    if (next.isEmpty) return;
-    if (!mounted) return;
-    final ctx = context;
-    next = widget.guards.fold(next, (s, g) => g(ctx, s));
-    if (next.isEmpty || listEquals(next, _state)) return;
-    _updateState(next);
+  /// Withdraws the claim of the last root Elixir, which nothing else would replace.
+  void _reportNoElixirLeft() {
+    final host = _host;
+    if (host == null) return;
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      if (_roots.isEmpty && host.mounted) NavigationNotification(canHandlePop: host.canPop()).dispatch(host.context);
+    }, debugLabel: 'Elixir.reportNoElixirLeft');
   }
-
-  /// Called when a page is removed from the stack.
-  void _onDidRemovePage(ElixirPage page) {
-    change((pages) => pages..removeWhere((p) => p.key == page.key));
-  }
+  /* #endregion */
 
   @override
-  Widget build(BuildContext context) => _InheritedElixir(
+  Widget build(BuildContext context) => _ElixirScope(
     state: this,
-    child: Navigator(
-      pages: _state,
-      reportsRouteUpdateToEngine: false,
-      restorationScopeId: 'elixir_navigator',
-      transitionDelegate: widget.transitionDelegate,
-      onDidRemovePage: (page) => _onDidRemovePage(page as ElixirPage),
-      observers: _observers,
+    pages: widget.controller.state,
+    child: NotificationListener<NavigationNotification>(
+      onNotification: _handleNavigationNotification,
+      child: Navigator(
+        // A new list, so the navigator also brings back a page a guard kept after the user closed it.
+        pages: List<Page<Object?>>.of(widget.controller.state),
+        onDidRemovePage: _handleDidRemovePage,
+        observers: _observers,
+        transitionDelegate: widget.transitionDelegate,
+        restorationScopeId: widget.restorationScopeId,
+        reportsRouteUpdateToEngine: widget.reportsRouteUpdateToEngine,
+      ),
     ),
   );
 }
 
-/// Inherited widget for quick access in the element tree.
-class _InheritedElixir extends InheritedWidget {
-  const _InheritedElixir({required this.state, required super.child});
+/// Links an Elixir with its controller below and with the nested Elixirs.
+class _ElixirScope extends InheritedWidget {
+  const _ElixirScope({required this.state, required this.pages, required super.child});
 
-  final ElixirState state;
+  final _ElixirState state;
 
-  /// The state from the closest instance of this class
-  /// that encloses the given context, if any.
-  /// For example: `Elixir.maybeOf(context)`.
-  static _InheritedElixir? maybeOf(BuildContext context, {bool listen = true}) => listen
-      ? context.dependOnInheritedWidgetOfExactType<_InheritedElixir>()
-      : context.getInheritedWidgetOfExactType<_InheritedElixir>();
-
-  static Never _notFoundInheritedWidgetOfExactType() => throw ArgumentError(
-    'Out of scope, not found inherited widget '
-        'a _InheritedElixir of the exact type',
-    'out_of_scope',
-  );
-
-  /// The state from the closest instance of this class
-  /// that encloses the given context.
-  /// For example: `Elixir.of(context)`.
-  static _InheritedElixir of(BuildContext context, {bool listen = true}) =>
-      maybeOf(context, listen: listen) ?? _notFoundInheritedWidgetOfExactType();
+  /// The pages this Elixir was built with.
+  final ElixirNavigationState pages;
 
   @override
-  bool updateShouldNotify(covariant _InheritedElixir oldWidget) => false;
+  bool updateShouldNotify(covariant _ElixirScope oldWidget) => !identical(oldWidget.pages, pages);
+}
+
+/// {@template elixir_notification}
+/// A change committed by the controller of an [Elixir], bubbling up through the widget tree.
+///
+/// ```dart
+/// NotificationListener<ElixirNotification>(
+///   onNotification: (notification) {
+///     log('${notification.controller.name}: ${notification.next}');
+///     return false; // let it reach the listeners above
+///   },
+///   child: Elixir(controller: controller),
+/// );
+/// ```
+///
+/// A change committed during a build is dispatched after the frame, merged with the following ones of that frame.
+/// {@endtemplate}
+final class ElixirNotification extends Notification {
+  /// {@macro elixir_notification}
+  const ElixirNotification(this.controller, this.previous, this.next);
+
+  /// The controller that committed the change; `controller.name` tells the Elixirs apart.
+  final ElixirController controller;
+
+  /// The pages before the change.
+  final ElixirNavigationState previous;
+
+  /// The pages after the change.
+  final ElixirNavigationState next;
+
+  /// The pages whose keys are new.
+  ElixirNavigationState get added => _without(next, previous);
+
+  /// The pages whose keys are gone.
+  ElixirNavigationState get removed => _without(previous, next);
+
+  static ElixirNavigationState _without(ElixirNavigationState pages, ElixirNavigationState other) {
+    final keys = {for (final page in other) page.key};
+    return [
+      for (final page in pages)
+        if (!keys.contains(page.key)) page,
+    ];
+  }
+
+  @override
+  void debugFillDescription(List<String> description) {
+    super.debugFillDescription(description);
+    description.add('$controller');
+  }
+}
+
+/// Reaches the [NavigatorState], keeps the visible route and catches the results given to `Navigator.pop`.
+class _Tracker extends NavigatorObserver {
+  _Tracker(this._onPop);
+
+  final void Function(LocalKey key, Object? result) _onPop;
+
+  /// The visible route, to see whether a `PopScope` blocks the back button.
+  Route<Object?>? top;
+
+  @override
+  void didChangeTop(Route<Object?> topRoute, Route<Object?>? previousTopRoute) => top = topRoute;
+
+  @override
+  void didPush(Route<Object?> route, Route<Object?>? previousRoute) => _track(route);
+
+  @override
+  void didReplace({Route<Object?>? newRoute, Route<Object?>? oldRoute}) {
+    if (newRoute != null) _track(newRoute);
+  }
+
+  void _track(Route<Object?> route) {
+    if (route case ModalRoute<Object?>(settings: ElixirPage(:final key))) {
+      route.registerPopEntry(_PopResult(key, _onPop));
+    }
+  }
+}
+
+/// A [PopEntry] that never blocks a pop and only records its result.
+class _PopResult extends PopEntry<Object?> {
+  _PopResult(this._key, this._onPop);
+
+  final LocalKey _key;
+  final void Function(LocalKey key, Object? result) _onPop;
+
+  @override
+  ValueListenable<bool> get canPopNotifier => const _AlwaysTrue();
+
+  @override
+  void onPopInvokedWithResult(bool didPop, Object? result) {
+    if (didPop) _onPop(_key, result);
+  }
+}
+
+/// A `true` that never changes, so it keeps no listeners of the routes.
+class _AlwaysTrue implements ValueListenable<bool> {
+  const _AlwaysTrue();
+
+  @override
+  bool get value => true;
+
+  @override
+  void addListener(VoidCallback listener) {}
+
+  @override
+  void removeListener(VoidCallback listener) {}
 }

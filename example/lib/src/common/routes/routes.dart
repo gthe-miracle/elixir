@@ -2,120 +2,95 @@ import 'package:elixir/elixir.dart';
 import 'package:flutter/material.dart';
 
 import '../../feature/home/home_screen.dart';
+import '../../feature/settings/about_sheet.dart';
 import '../../feature/settings/settings_dialog.dart';
 import '../../feature/settings/settings_scope.dart';
 import '../../feature/settings/settings_screen.dart';
 import 'custom_route_transitions.dart';
 
-enum AppRoutes implements ElixirAlias, Comparable<AppRoutes> {
-  // this is the root not uses for routing
+/// The pages of the root Elixir; `app` names the root Elixir itself.
+enum AppRoutes implements ElixirAlias {
   app('app'),
-  // these are the pages in the root
   home('home'),
   settings('settings_scope');
 
-  const AppRoutes(this.value);
-
-  final String value;
+  const AppRoutes(this.alias);
 
   @override
-  String get alias => value;
-
-  @override
-  int compareTo(AppRoutes other) => index.compareTo(other.index);
-
-  @override
-  String toString() => value;
+  final String alias;
 }
 
-/// Type definition for the page.
+/// The pages of the settings Elixir, nested in [SettingsScopePage].
+enum Settings implements ElixirAlias {
+  settings('settings'),
+  dialog('settings_dialog'),
+  about('about');
+
+  const Settings(this.alias);
+
+  @override
+  final String alias;
+}
+
+/// Reads the child of its current page on every build, so a new page under the same key updates the screen.
+final class AppPageRoute extends PageRoute<Object?> with MaterialRouteTransitionMixin<Object?> {
+  AppPageRoute(AppPage page) : super(settings: page);
+
+  @override
+  Widget buildContent(BuildContext context) => (settings as AppPage).child;
+
+  @override
+  bool get maintainState => true;
+}
+
+/// The base of every page: Material transitions from the theme, page-based.
 @immutable
 sealed class AppPage extends ElixirPage {
-  const AppPage({required super.name, required super.child, super.arguments, super.key});
+  const AppPage({required super.child, super.arguments, super.key});
 
   @override
-  Route<void> createRoute(BuildContext context) => MaterialPageRoute(builder: (context) => child, settings: this);
-
-  @override
-  int get hashCode => key.hashCode;
-
-  @override
-  bool operator ==(Object other) => identical(this, other) || other is AppPage && key == other.key;
-
-  @override
-  String toString() => '/$name${arguments.isEmpty ? '' : '~$arguments'}';
+  Route<Object?> createRoute(BuildContext context) => AppPageRoute(this);
 }
 
 final class HomePage extends AppPage {
-  const HomePage() : super(child: const HomeScreen(), name: 'home');
-
-  @override
-  Set<String> get tags => {'home'};
+  const HomePage() : super(child: const HomeScreen());
 
   @override
   ElixirAlias get alias => AppRoutes.home;
 }
 
 final class SettingsScopePage extends AppPage {
-  SettingsScopePage({required final String data}) : super(child: SettingsScope(data: data), name: 'settings_scope');
+  SettingsScopePage({required this.data}) : super(child: SettingsScope(data: data));
 
-  // @override
-  // Route<void> createRoute(BuildContext context) => CustomMaterialRoute(page: this);
-
-  @override
-  Set<String> get tags => {'settings_scope'};
+  final String data;
 
   @override
   ElixirAlias get alias => AppRoutes.settings;
 }
 
-/// *** ========================= Settings Scope =========================
-
-/// {@template routes}
-/// Routes enumeration
-/// {@endtemplate}
-enum Settings implements ElixirAlias, Comparable<Settings> {
-  settings('settings'),
-  settingsDialog('settings_dialog');
-
-  const Settings(this.value);
-
-  /// Value of the enum
-  final String value;
-
-  @override
-  String get alias => value;
-
-  @override
-  int compareTo(Settings other) => index.compareTo(other.index);
-
-  @override
-  String toString() => value;
-}
-
 final class SettingsPage extends AppPage {
-  SettingsPage({required final String data}) : super(child: SettingsScreen(data: data), name: 'settings');
+  SettingsPage({required this.data}) : super(child: SettingsScreen(data: data));
+
+  final String data;
 
   @override
-  Route<void> createRoute(BuildContext context) => CustomMaterialRoute(page: this);
-
-  @override
-  Set<String> get tags => {'settings'};
+  Route<Object?> createRoute(BuildContext context) => CustomMaterialRoute(page: this);
 
   @override
   ElixirAlias get alias => Settings.settings;
 }
 
-final class SettingsDialogPage extends AppPage {
-  const SettingsDialogPage() : super(child: const SettingsDialog(), name: 'settings_dialog');
+/// Opened with `pushForResult<bool>`: the dialog pops `true` or `false`.
+final class SettingsDialogPage extends AppPage with ElixirDialogPage {
+  const SettingsDialogPage() : super(child: const SettingsDialog());
 
   @override
-  Route<void> createRoute(BuildContext context) =>
-      DialogRoute(context: context, settings: this, builder: (context) => child);
+  ElixirAlias get alias => Settings.dialog;
+}
+
+final class AboutSheetPage extends AppPage with ElixirSheetPage {
+  const AboutSheetPage() : super(child: const AboutSheet());
 
   @override
-  Set<String> get tags => {'settings_dialog'};
-
-  @override
-  ElixirAlias get alias => Settings.settingsDialog;
+  ElixirAlias get alias => Settings.about;
 }

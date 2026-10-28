@@ -199,18 +199,21 @@ once. Their routes are widgets-only and page-based. The mixins expose these gett
 
 ## Observing navigation
 
-Every committed change is dispatched as an `ElixirNotification` that bubbles up through the outer Elixirs. One listener
-above the root hears every navigator:
+Every committed change is dispatched as an `ElixirNotification` that bubbles up through the outer Elixirs. `listener`
+on an Elixir hears that Elixir and every Elixir nested inside it, so `listener` on the root hears the whole app:
 
 ```dart
-NotificationListener<ElixirNotification>(
-  onNotification: (n) {
-    analytics.screens(n.controller.name, added: n.added, removed: n.removed);
-    return false;
-  },
-  child: Elixir(controller: controller),
+Elixir(
+  controller: controller,
+  listener: (n) => analytics.screens(n.controller.name, added: n.added, removed: n.removed),
 )
 ```
+
+`controller.name` tells the Elixirs apart. `listener` never stops the notification, and an error it throws is reported
+instead of breaking the listeners above.
+
+`listener` is a shortcut for a `NotificationListener<ElixirNotification>` wrapped around the Elixir. Use the
+`NotificationListener` directly to hear the changes from a widget above the Elixir, or to stop one by returning `true`.
 
 You can also watch the state directly:
 - `ElixirController` is a `ValueListenable<List<ElixirPage>>`, so it works with `ListenableBuilder` and with code
@@ -288,6 +291,7 @@ A change requested while another one is committed (from a listener, for example)
 | Parameter                    | Type                         | Description                                         |
 | ---------------------------- | ---------------------------- | --------------------------------------------------- |
 | `controller`                 | `ElixirController`           | Required                                            |
+| `listener`                   | `ElixirListener?`            | Changes of this Elixir and of the nested ones       |
 | `observers`                  | `List<NavigatorObserver>`    | Observers of the underlying `Navigator`             |
 | `transitionDelegate`         | `TransitionDelegate<Object?>`| Defaults to `DefaultTransitionDelegate`             |
 | `onBackButtonPressed`        | `ElixirBackHandler?`         | Replaces `navigator.maybePop()`                     |
@@ -317,7 +321,8 @@ Static access works as follows:
 | `guards: [(context, state) => …]` on the widget | `guards: [ElixirGuard((from, to) => …)]` on the controller; read dependencies when you create the controller |
 | `state.toSet().toList()` guard | Built in: the last page of each key wins |
 | `context.elixir` → `ElixirState` | `context.elixir` → `ElixirController` |
-| `observer.addListener((elixir, previous, next) {})`, `listeners:` | `NotificationListener<ElixirNotification>` |
+| `listeners: [(elixir, previous, next) {}]` | `listener: (notification) {}` |
+| `context.elixir.observer.addListener(…)` | `listener` on the root Elixir, or a `NotificationListener<ElixirNotification>` above it |
 | `onBackButtonPressed: (state) => (state:, handled:)` | `onBackButtonPressed: (navigator) async => …` |
 | `super(name: …, child: …)`, required `tags`, `==` override | `super(child: …)`; `tags` optional; no `==` override |
 | `Route<void> createRoute` with `MaterialPageRoute(builder:)` | `Route<Object?> createRoute` with a page-based route |

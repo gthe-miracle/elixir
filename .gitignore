@@ -32,3 +32,8 @@ build/
 
 # FVM Version Cache
 .fvm/
+
+# Claude
+.claude/
+CLAUDE.md
+tools/

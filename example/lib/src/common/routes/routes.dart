@@ -64,7 +64,11 @@ final class HomePage extends AppPage {
 }
 
 final class SettingsScopePage extends AppPage {
-  SettingsScopePage({required this.data}) : super(child: SettingsScope(data: data));
+  SettingsScopePage({required this.data})
+    : super(
+        child: SettingsScope(data: data),
+        arguments: {'data': data},
+      );
 
   final String data;
 
@@ -73,7 +77,11 @@ final class SettingsScopePage extends AppPage {
 }
 
 final class SettingsPage extends AppPage {
-  SettingsPage({required this.data}) : super(child: SettingsScreen(data: data));
+  SettingsPage({required this.data})
+    : super(
+        child: SettingsScreen(data: data),
+        arguments: {'data': data},
+      );
 
   final String data;
 

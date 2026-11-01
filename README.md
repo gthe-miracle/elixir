@@ -227,8 +227,8 @@ You can also watch the state directly:
   outside the widget tree.
 - `Elixir.stackOf(context)` rebuilds a widget on every change.
 
-For debug logs, `Elixir.treeView` draws every mounted Elixir, nested ones under their pages, with the pages on screen
-in green (ANSI colors):
+For debug logs, `Elixir.treeView` draws every mounted Elixir, nested ones under their pages, each page with its
+arguments as JSON and the pages on screen in green (ANSI colors):
 
 ```dart
 Elixir(controller: controller, listener: (_) => log(Elixir.treeView));
@@ -237,9 +237,17 @@ Elixir(controller: controller, listener: (_) => log(Elixir.treeView));
 ```text
 app
 ├─ home
-├─ profile
+├─ profile {"id": 1}
 └─ settings
    └─ notifications
+```
+
+For analytics, `Elixir.treeLine` is the same tree on one line, without colors:
+`app(home, profile {"id": 1}, settings(notifications))`. Read it after the frame, so the Elixir nested in a page that was
+just pushed is already mounted:
+
+```dart
+listener: (_) => WidgetsBinding.instance.addPostFrameCallback((_) => analytics.log(Elixir.treeLine)),
 ```
 
 ## Back button
@@ -325,7 +333,8 @@ Static access works as follows:
 - `Elixir.of(context)` and `Elixir.maybeOf(context)` return the controller, the same as `context.elixir` and
   `context.maybeElixir`;
 - `Elixir.stackOf(context)` returns the pages and rebuilds on every change;
-- `Elixir.treeView` returns the pages of every Elixir as a tree, nested Elixirs under their pages.
+- `Elixir.treeView` returns the pages of every Elixir as a tree, nested Elixirs under their pages;
+- `Elixir.treeLine` returns the same tree on one line, for analytics.
 
 ## Design
 

@@ -1,8 +1,7 @@
-import 'dart:developer';
-
 import 'package:elixir/elixir.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:logbook/logbook.dart';
 
 import '../routes/routes.dart';
 
@@ -38,8 +37,7 @@ class _AppState extends State<App> {
   void setThemeMode(ThemeMode mode) => setState(() => _themeMode = mode);
 
   /// Every change of every Elixir, nested ones included, bubbles up to here.
-  void _log(ElixirNotification notification) =>
-      log('${notification.controller.name?.alias}: ${notification.next.join(' > ')}', name: 'elixir');
+  void _log(ElixirNotification notification) => l.i(Elixir.treeView);
 
   static const PageTransitionsTheme _transitions = PageTransitionsTheme(
     builders: <TargetPlatform, PageTransitionsBuilder>{

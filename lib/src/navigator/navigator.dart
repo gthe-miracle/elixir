@@ -91,6 +91,19 @@ class Elixir extends StatefulWidget {
   static ElixirNavigationState stackOf(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<_ElixirScope>()?.pages ?? _notFound();
 
+  /// The pages of every root Elixir and of the Elixirs nested in them, as a tree for debug logs:
+  /// ```text
+  /// app
+  /// ├─ home
+  /// └─ settings
+  ///    └─ notifications
+  /// ```
+  /// The active pages, the ones on screen, are green with ANSI escape codes, which a console without colors prints as
+  /// they are. A page hosting several Elixirs, e.g. tabs, lists them under their `controller.name`. Only the mounted
+  /// Elixirs are shown: called from a [listener], the Elixir nested in a page that was just pushed appears after the
+  /// frame.
+  static String get treeView => _ElixirState._roots.map((root) => root._treeView).join('\n');
+
   static Never _notFound() => throw FlutterError('No Elixir found above this context.');
 
   @override
@@ -226,6 +239,46 @@ class _ElixirState extends State<Elixir> with WidgetsBindingObserver {
     // A guard has kept the page that the navigator already dropped: build it again.
     if (mounted && controller.state.any((other) => other.key == page.key)) setState(() {});
   }
+
+  /* #region Tree view */
+  String get _label => widget.controller.name?.alias ?? 'elixir';
+
+  String get _treeView {
+    final out = StringBuffer(_label);
+    _writeTree(out, '', shown: true);
+    return '$out';
+  }
+
+  /// Writes the pages, one per line after [indent], each with the Elixirs nested in it. The active page, the top one
+  /// of an Elixir that is [shown] and [_visible], is green.
+  // ponytail: an Elixir in a route that is not one of the pages, e.g. a `showDialog`, is left out.
+  void _writeTree(StringBuffer out, String indent, {required bool shown}) {
+    final pages = widget.controller.state;
+    for (final (index, page) in pages.indexed) {
+      final last = index == pages.length - 1;
+      final active = shown && last && _visible;
+      final next = _writeNode(out, indent, active ? '\x1B[32m$page\x1B[0m' : '$page', last: last);
+      final nested = [
+        for (final child in _children)
+          if (child._route?.settings case ElixirPage(:final key) when key == page.key) child,
+      ];
+      if (nested case [final child]) {
+        child._writeTree(out, next, shown: active);
+      } else {
+        // Several Elixirs in one page, e.g. tabs: name each one.
+        for (final (index, child) in nested.indexed) {
+          child._writeTree(out, _writeNode(out, next, child._label, last: index == nested.length - 1), shown: active);
+        }
+      }
+    }
+  }
+
+  /// Writes a branch to [label] and returns the indent of its children.
+  static String _writeNode(StringBuffer out, String indent, String label, {required bool last}) {
+    out.write('\n$indent${last ? '└─ ' : '├─ '}$label');
+    return '$indent${last ? '   ' : '│  '}';
+  }
+  /* #endregion */
 
   /* #region Back button */
   void _register() {

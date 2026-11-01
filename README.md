@@ -220,6 +220,21 @@ You can also watch the state directly:
   outside the widget tree.
 - `Elixir.stackOf(context)` rebuilds a widget on every change.
 
+For debug logs, `Elixir.treeView` draws every mounted Elixir, nested ones under their pages, with the pages on screen
+in green (ANSI colors):
+
+```dart
+Elixir(controller: controller, listener: (_) => log(Elixir.treeView));
+```
+
+```text
+app
+├─ home
+├─ profile
+└─ settings
+   └─ notifications
+```
+
 ## Back button
 
 The system back button goes to the visible nested Elixirs first, newest first, then to `navigator.maybePop()`. So:
@@ -301,7 +316,8 @@ A change requested while another one is committed (from a listener, for example)
 Static access works as follows:
 - `Elixir.of(context)` and `Elixir.maybeOf(context)` return the controller, the same as `context.elixir` and
   `context.maybeElixir`;
-- `Elixir.stackOf(context)` returns the pages and rebuilds on every change.
+- `Elixir.stackOf(context)` returns the pages and rebuilds on every change;
+- `Elixir.treeView` returns the pages of every Elixir as a tree, nested Elixirs under their pages.
 
 ## Design
 

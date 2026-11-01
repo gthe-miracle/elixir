@@ -13,6 +13,8 @@ dependencies:
 
   cupertino_icons: ^1.0.8
 
+  logbook: ^0.6.1
+
   elixir:
     path: ../
 

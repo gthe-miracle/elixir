@@ -1,5 +1,5 @@
 import 'package:elixir/elixir.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 
 import '../../feature/home/home_screen.dart';
 import '../../feature/settings/about_sheet.dart';
@@ -33,17 +33,21 @@ enum Settings implements ElixirAlias {
 }
 
 /// Reads the child of its current page on every build, so a new page under the same key updates the screen.
-final class AppPageRoute extends PageRoute<Object?> with MaterialRouteTransitionMixin<Object?> {
+final class AppPageRoute extends PageRoute<Object?> with CupertinoRouteTransitionMixin<Object?> {
   AppPageRoute(AppPage page) : super(settings: page);
 
   @override
   Widget buildContent(BuildContext context) => (settings as AppPage).child;
 
+  /// Shown as the previous-page title by a `CupertinoNavigationBar`; none here.
+  @override
+  String? get title => null;
+
   @override
   bool get maintainState => true;
 }
 
-/// The base of every page: Material transitions from the theme, page-based.
+/// The base of every page: Cupertino transitions with the swipe-back gesture on every platform, page-based.
 @immutable
 sealed class AppPage extends ElixirPage {
   const AppPage({required super.child, super.arguments, super.key});

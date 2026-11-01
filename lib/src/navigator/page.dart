@@ -106,13 +106,31 @@ abstract base class ElixirPage extends Page<Object?> {
 /// Route<Object?> createRoute(BuildContext context) => ElixirPageRoute(this);
 /// ```
 ///
-/// For the transitions of Material or Cupertino, use their page-based mixins in the app:
+/// For the transitions of Material or Cupertino, use their page-based mixins in the app. Material takes the transition
+/// from `ThemeData.pageTransitionsTheme`:
 /// ```dart
 /// final class AppPageRoute extends PageRoute<Object?> with MaterialRouteTransitionMixin<Object?> {
 ///   AppPageRoute(AppPage page) : super(settings: page);
 ///
 ///   @override
 ///   Widget buildContent(BuildContext context) => (settings as AppPage).child;
+///
+///   @override
+///   bool get maintainState => true;
+/// }
+/// ```
+///
+/// Cupertino slides from the right, with the swipe-back gesture, on every platform. It also needs a `title`, which a
+/// `CupertinoNavigationBar` shows on the back button of the next page:
+/// ```dart
+/// final class AppPageRoute extends PageRoute<Object?> with CupertinoRouteTransitionMixin<Object?> {
+///   AppPageRoute(AppPage page) : super(settings: page);
+///
+///   @override
+///   Widget buildContent(BuildContext context) => (settings as AppPage).child;
+///
+///   @override
+///   String? get title => null;
 ///
 ///   @override
 ///   bool get maintainState => true;

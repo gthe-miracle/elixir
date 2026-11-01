@@ -72,6 +72,13 @@ final class AppPageRoute extends PageRoute<Object?> with MaterialRouteTransition
   bool get maintainState => true;
 }
 
+// Or Cupertino transitions with the swipe-back gesture on every platform; `title` is required by the mixin:
+// final class AppPageRoute extends PageRoute<Object?> with CupertinoRouteTransitionMixin<Object?> {
+//   ...same as above, plus:
+//   @override
+//   String? get title => null;
+// }
+
 final class HomePage extends AppPage {
   const HomePage() : super(child: const HomeScreen());
 
@@ -264,7 +271,8 @@ Elixir(
 The example has a widgets-only port of Flutter's iOS edge swipe for custom routes: copy
 `example/lib/src/common/cupertino_back/cupertino_back_gesture.dart` and see how
 `example/lib/src/common/routes/custom_route_transitions.dart` uses it. Routes built with
-`MaterialRouteTransitionMixin` or `CupertinoRouteTransitionMixin` already get the swipe from the theme.
+`CupertinoRouteTransitionMixin` always have the swipe, and those built with `MaterialRouteTransitionMixin` get it from
+a theme that uses `CupertinoPageTransitionsBuilder`.
 
 ## Core API
 

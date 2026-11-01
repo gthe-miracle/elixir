@@ -261,7 +261,7 @@ void main() {
       expect(tester.element(find.text('c')).elixir, same(inner));
     });
 
-    testWidgets('Elixir.treeView draws the nested Elixirs under their pages', (tester) async {
+    testWidgets('Elixir.treeView and treeLine draw the nested Elixirs under their pages', (tester) async {
       final left = controllerOf([d], name: Alias.login);
       final right = controllerOf([e], name: Alias.dialog);
       final outer = controllerOf(name: Alias.a, [
@@ -274,7 +274,14 @@ void main() {
             ],
           ),
         ),
-        TestPage(Alias.scope, child: Elixir(controller: controllerOf([c]))),
+        TestPage(
+          Alias.scope,
+          child: Elixir(
+            controller: controllerOf([
+              const TestPage(Alias.c, arguments: {'id': 1, 'data': 'foo'}),
+            ]),
+          ),
+        ),
       ]);
       await pumpApp(tester, Elixir(controller: outer));
 
@@ -289,9 +296,10 @@ void main() {
           '│  └─ dialog',
           '│     └─ e',
           '└─ \x1B[32mscope\x1B[0m',
-          '   └─ \x1B[32mc\x1B[0m',
+          '   └─ \x1B[32mc {"id": 1, "data": "foo"}\x1B[0m',
         ].join('\n'),
       );
+      expect(Elixir.treeLine, 'a(b(login(d), dialog(e)), scope(c {"id": 1, "data": "foo"}))');
     });
   });
 

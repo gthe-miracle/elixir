@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
@@ -96,13 +98,22 @@ class Elixir extends StatefulWidget {
   /// app
   /// ├─ home
   /// └─ settings
-  ///    └─ notifications
+  ///    └─ profile {"id": 1, "data": "foo"}
   /// ```
-  /// The active pages, the ones on screen, are green with ANSI escape codes, which a console without colors prints as
-  /// they are. A page hosting several Elixirs, e.g. tabs, lists them under their `controller.name`. Only the mounted
-  /// Elixirs are shown: called from a [listener], the Elixir nested in a page that was just pushed appears after the
-  /// frame.
+  /// A page shows its name and its [ElixirPage.arguments] as JSON. The active pages, the ones on screen, are green with
+  /// ANSI escape codes, which a console without colors prints as they are. A page hosting several Elixirs, e.g. tabs,
+  /// lists them under their `controller.name`. Only the mounted Elixirs are shown: called from a [listener], the Elixir
+  /// nested in a page that was just pushed appears after the frame.
   static String get treeView => _ElixirState._roots.map((root) => root._treeView).join('\n');
+
+  /// [treeView] on one line for analytics, without colors: `app(home, settings(profile {"id": 1, "data": "foo"}))`.
+  /// A page hosting several Elixirs lists them by `controller.name`: `tabs(feed(post), profile(me))`.
+  ///
+  /// Read it after the frame, so the Elixir nested in a page that was just pushed is already there:
+  /// ```dart
+  /// listener: (_) => WidgetsBinding.instance.addPostFrameCallback((_) => analytics.log(Elixir.treeLine)),
+  /// ```
+  static String get treeLine => _ElixirState._roots.map((root) => root._treeLine).join(', ');
 
   static Never _notFound() => throw FlutterError('No Elixir found above this context.');
 
@@ -257,11 +268,9 @@ class _ElixirState extends State<Elixir> with WidgetsBindingObserver {
     for (final (index, page) in pages.indexed) {
       final last = index == pages.length - 1;
       final active = shown && last && _visible;
-      final next = _writeNode(out, indent, active ? '\x1B[32m$page\x1B[0m' : '$page', last: last);
-      final nested = [
-        for (final child in _children)
-          if (child._route?.settings case ElixirPage(:final key) when key == page.key) child,
-      ];
+      final label = _pageLabel(page);
+      final next = _writeNode(out, indent, active ? '\x1B[32m$label\x1B[0m' : label, last: last);
+      final nested = _nestedIn(page);
       if (nested case [final child]) {
         child._writeTree(out, next, shown: active);
       } else {
@@ -273,11 +282,40 @@ class _ElixirState extends State<Elixir> with WidgetsBindingObserver {
     }
   }
 
+  /// The name with the arguments as JSON, `profile {"id": 1, "data": "foo"}`; a value JSON has no form for is written
+  /// with its `toString`.
+  static String _pageLabel(ElixirPage page) {
+    if (page.arguments.isEmpty) return page.name;
+    final entries = page.arguments.entries.map(
+      (entry) => '${jsonEncode(entry.key)}: ${jsonEncode(entry.value, toEncodable: (value) => '$value')}',
+    );
+    return '${page.name} {${entries.join(', ')}}';
+  }
+
   /// Writes a branch to [label] and returns the indent of its children.
   static String _writeNode(StringBuffer out, String indent, String label, {required bool last}) {
     out.write('\n$indent${last ? '└─ ' : '├─ '}$label');
     return '$indent${last ? '   ' : '│  '}';
   }
+
+  String get _treeLine => '$_label(${_pagesLine()})';
+
+  /// The pages, each with the Elixirs nested in it in parentheses.
+  String _pagesLine() => widget.controller.state
+      .map(
+        (page) => switch (_nestedIn(page)) {
+          [] => _pageLabel(page),
+          [final child] => '${_pageLabel(page)}(${child._pagesLine()})',
+          final nested => '${_pageLabel(page)}(${nested.map((child) => child._treeLine).join(', ')})',
+        },
+      )
+      .join(', ');
+
+  /// The Elixirs nested in [page], in the order they were mounted.
+  List<_ElixirState> _nestedIn(ElixirPage page) => [
+    for (final child in _children)
+      if (child._route?.settings case ElixirPage(:final key) when key == page.key) child,
+  ];
   /* #endregion */
 
   /* #region Back button */

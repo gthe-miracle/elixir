@@ -37,7 +37,12 @@ class _AppState extends State<App> {
   void setThemeMode(ThemeMode mode) => setState(() => _themeMode = mode);
 
   /// Every change of every Elixir, nested ones included, bubbles up to here.
-  void _log(ElixirNotification notification) => l.i(Elixir.treeView);
+  void _log(ElixirNotification notification) {
+    l.i(Elixir.treeView);
+    l.i('--------------------------------');
+    l.i(Elixir.treeLine);
+    l.i('');
+  }
 
   static const PageTransitionsTheme _transitions = PageTransitionsTheme(
     builders: <TargetPlatform, PageTransitionsBuilder>{

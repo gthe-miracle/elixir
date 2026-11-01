@@ -23,7 +23,7 @@ adapter. See "Migrating from 0.4" in the README.
 - Added `pushForResult`, `pop(result)` and `remove(page, result)`; `Navigator.pop(context, result)` completes
   `pushForResult` too
 - Added `ElixirDialogPage` and `ElixirSheetPage` (widgets-only, page-based), `ElixirPage.modalTag`, `RootGuard`,
-  `ModalGuard`, `ElixirPageRoute`, `Elixir.stackOf`, `removeTag`, `remove` and `context.maybeElixir`
+  `ModalGuard`, `ElixirPageRoute`, `Elixir.stackOf`, `Elixir.treeView`, `removeTag`, `remove` and `context.maybeElixir`
 - Changes are deduplicated by key (the last page wins), queued when requested during a change, isolated from failing
   guards, and notified after the frame when committed during a build
 - A page the user closed but a guard kept is shown again; the root Elixir reports `canHandlePop` for the whole tree,

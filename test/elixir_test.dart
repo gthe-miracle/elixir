@@ -260,6 +260,39 @@ void main() {
       expect(tester.element(find.text('a', skipOffstage: false)).elixir, same(outer));
       expect(tester.element(find.text('c')).elixir, same(inner));
     });
+
+    testWidgets('Elixir.treeView draws the nested Elixirs under their pages', (tester) async {
+      final left = controllerOf([d], name: Alias.login);
+      final right = controllerOf([e], name: Alias.dialog);
+      final outer = controllerOf(name: Alias.a, [
+        TestPage(
+          Alias.b,
+          child: Row(
+            children: [
+              Expanded(child: Elixir(controller: left)),
+              Expanded(child: Elixir(controller: right)),
+            ],
+          ),
+        ),
+        TestPage(Alias.scope, child: Elixir(controller: controllerOf([c]))),
+      ]);
+      await pumpApp(tester, Elixir(controller: outer));
+
+      expect(
+        Elixir.treeView,
+        // Green: the top pages on screen. d and e are not, they are under the covered b.
+        [
+          'a',
+          '├─ b',
+          '│  ├─ login',
+          '│  │  └─ d',
+          '│  └─ dialog',
+          '│     └─ e',
+          '└─ \x1B[32mscope\x1B[0m',
+          '   └─ \x1B[32mc\x1B[0m',
+        ].join('\n'),
+      );
+    });
   });
 
   group('W24: notifications', () {

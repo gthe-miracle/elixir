@@ -12,5 +12,5 @@
     "statusBar.background": "#b72bb5",
     "statusBar.foreground": "#000000"
   },
-  "cSpell.words": ["Cupertino", "endtemplate", "pubspec"]
+  "cSpell.words": ["Cupertino", "dedupe", "endtemplate", "pubspec"]
 }

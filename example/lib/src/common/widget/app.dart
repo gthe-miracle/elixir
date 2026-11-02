@@ -64,13 +64,6 @@ class _AppState extends State<App> {
     theme: ThemeData(brightness: Brightness.light, pageTransitionsTheme: _transitions),
     darkTheme: ThemeData(brightness: Brightness.dark, pageTransitionsTheme: _transitions),
     themeMode: _themeMode,
-    builder: (context, _) => Elixir(
-      controller: _controller,
-      listener: _log,
-      onBackButtonPressed: (navigator) async {
-        if (await navigator.maybePop()) return true;
-        return true;
-      },
-    ),
+    builder: (context, _) => Elixir(controller: _controller, listener: _log),
   );
 }

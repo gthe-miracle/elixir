@@ -27,6 +27,8 @@ class HomeScreen extends StatelessWidget {
       ],
     ),
     // Elixir.stackOf rebuilds this text on every change of the root Elixir.
-    body: SafeArea(child: Center(child: Text('Pages: ${Elixir.treeLine}'))),
+    body: SafeArea(
+      child: Center(child: Text('Pages: ${Elixir.stackOf(context).map((page) => page.name).join(' > ')}')),
+    ),
   );
 }

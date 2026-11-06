@@ -111,6 +111,10 @@ final class _SheetRoute extends PopupRoute<Object?> {
   /// The downward speed, in logical pixels per second, that closes the sheet whatever its position.
   static const double _closingVelocity = 700;
 
+  /// Whether a drag of the sheet is running. A recognizer that loses the gesture arena to the content of the sheet,
+  /// e.g. a button or a list, cancels without having started, and [_settle] must not end a gesture nobody started.
+  bool _dragging = false;
+
   ElixirSheetPage get _page => settings as ElixirSheetPage;
 
   @override
@@ -134,7 +138,7 @@ final class _SheetRoute extends PopupRoute<Object?> {
           alignment: Alignment.bottomCenter,
           child: Builder(
             builder: (context) => GestureDetector(
-              onVerticalDragStart: _page.enableDrag ? (_) => navigator?.didStartUserGesture() : null,
+              onVerticalDragStart: _page.enableDrag ? (_) => _startDrag() : null,
               onVerticalDragUpdate: _page.enableDrag ? (details) => _drag(details, context.size?.height) : null,
               onVerticalDragEnd: _page.enableDrag ? (details) => _settle(details.primaryVelocity ?? 0) : null,
               onVerticalDragCancel: _page.enableDrag ? () => _settle(0) : null,
@@ -144,6 +148,11 @@ final class _SheetRoute extends PopupRoute<Object?> {
         ),
       );
 
+  void _startDrag() {
+    _dragging = true;
+    navigator?.didStartUserGesture();
+  }
+
   // The drag follows the finger linearly; the slide keeps no curve, so it does not jump when a drag starts.
   void _drag(DragUpdateDetails details, double? height) {
     if (height == null || height == 0) return;
@@ -151,12 +160,17 @@ final class _SheetRoute extends PopupRoute<Object?> {
   }
 
   void _settle(double velocity) {
+    if (!_dragging) return;
+    _dragging = false;
     final navigator = this.navigator;
-    if (navigator == null || !isActive) return;
-    if (velocity > _closingVelocity || (velocity >= 0 && controller!.value < 0.5)) {
-      navigator.pop();
-    } else {
-      controller!.forward();
+    if (navigator == null) return;
+    // A sheet closed under the finger is already on its way out; only the gesture is left to end.
+    if (isActive) {
+      if (velocity > _closingVelocity || (velocity >= 0 && controller!.value < 0.5)) {
+        navigator.pop();
+      } else {
+        controller!.forward();
+      }
     }
     navigator.didStopUserGesture();
   }

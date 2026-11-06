@@ -78,6 +78,63 @@ void main() {
     expect(aliases(controller), [Alias.a, Alias.sheet]);
   });
 
+  testWidgets('a list inside a sheet takes the drag and leaves the sheet alone', (tester) async {
+    final controller = await _pump(tester);
+    controller.push(
+      SheetTestPage(
+        Alias.sheet,
+        child: SizedBox(height: 300, child: ListView(children: [for (var i = 0; i < 40; i++) Text('item $i')])),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.drag(find.byType(ListView), const Offset(0, -100));
+    await tester.pumpAndSettle();
+
+    expect(aliases(controller), [Alias.a, Alias.sheet]);
+  });
+
+  testWidgets('a button inside a sheet takes the tap and leaves the sheet alone', (tester) async {
+    final controller = await _pump(tester);
+    var tapped = false;
+    controller.push(
+      SheetTestPage(
+        Alias.sheet,
+        child: GestureDetector(
+          onTap: () => tapped = true,
+          child: const SizedBox(height: 300, width: double.infinity, child: Text('sheet')),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('sheet'));
+    await tester.pumpAndSettle();
+
+    expect(tapped, isTrue);
+    expect(aliases(controller), [Alias.a, Alias.sheet]);
+  });
+
+  testWidgets('a drag ends the user gesture of a sheet closed under the finger', (tester) async {
+    final controller = await _pump(tester);
+    controller.push(sheet);
+    await tester.pumpAndSettle();
+    final navigator = Navigator.of(tester.element(find.text('sheet')));
+
+    final gesture = await tester.startGesture(tester.getCenter(find.text('sheet')));
+    await gesture.moveBy(const Offset(0, 40));
+    await tester.pump();
+    expect(navigator.userGestureInProgress, isTrue);
+
+    controller.pop();
+    await tester.pump();
+    await gesture.up();
+    await tester.pumpAndSettle();
+
+    expect(navigator.userGestureInProgress, isFalse);
+    expect(aliases(controller), [Alias.a]);
+  });
+
   testWidgets('a screen pushed over a dialog goes under it', (tester) async {
     final controller = await _pump(tester);
     controller

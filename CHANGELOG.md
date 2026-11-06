@@ -26,6 +26,8 @@ adapter. See "Migrating from 0.4" in the README.
   `ModalGuard`, `ElixirPageRoute`, `Elixir.stackOf`, `removeTag`, `remove` and `context.maybeElixir`
 - Added `Elixir.treeView`, the tree of every Elixir for debug logs, and `Elixir.treeLine`, the same on one line for
   analytics
+- A visible nested Elixir that can pop blocks the route hosting it, so the swipe-back of that route no longer closes
+  it over an open dialog or sheet, or with pages stacked inside it
 - Changes are deduplicated by key (the last page wins), queued when requested during a change, isolated from failing
   guards, and notified after the frame when committed during a build
 - A page the user closed but a guard kept is shown again; the root Elixir reports `canHandlePop` for the whole tree,

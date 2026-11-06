@@ -14,9 +14,6 @@ class CustomMaterialRoute extends PageRoute<Object?> {
   AppPage get page => settings as AppPage;
 
   @override
-  bool get popGestureEnabled => true;
-
-  @override
   Widget buildPage(BuildContext context, Animation<double> animation, Animation<double> secondaryAnimation) =>
       page.child;
 

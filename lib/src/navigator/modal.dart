@@ -144,7 +144,7 @@ final class _SheetRoute extends PopupRoute<Object?> {
         ),
       );
 
-  // ponytail: the drag follows the finger linearly; the slide keeps no curve, so it does not jump when a drag starts.
+  // The drag follows the finger linearly; the slide keeps no curve, so it does not jump when a drag starts.
   void _drag(DragUpdateDetails details, double? height) {
     if (height == null || height == 0) return;
     controller!.value -= details.primaryDelta! / height;

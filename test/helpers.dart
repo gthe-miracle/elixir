@@ -1,4 +1,5 @@
 import 'package:elixir/elixir.dart';
+import 'package:flutter/cupertino.dart' show CupertinoRouteTransitionMixin;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -40,6 +41,27 @@ final class SheetTestPage extends TestPage with ElixirSheetPage {
   const SheetTestPage(super.alias, {super.child});
 }
 
+/// A page with the edge swipe of a Cupertino route.
+final class SwipeTestPage extends TestPage {
+  const SwipeTestPage(super.alias, {super.child});
+
+  @override
+  Route<Object?> createRoute(BuildContext context) => _SwipeRoute(this);
+}
+
+final class _SwipeRoute extends PageRoute<Object?> with CupertinoRouteTransitionMixin<Object?> {
+  _SwipeRoute(ElixirPage page) : super(settings: page);
+
+  @override
+  Widget buildContent(BuildContext context) => (settings as ElixirPage).child;
+
+  @override
+  String? get title => null;
+
+  @override
+  bool get maintainState => true;
+}
+
 class _Name extends StatelessWidget {
   const _Name();
 
@@ -71,6 +93,12 @@ Future<bool> back(WidgetTester tester) async {
   final handled = await tester.binding.handlePopRoute();
   await tester.pumpAndSettle();
   return handled;
+}
+
+/// Swipes from the left edge of the screen across it.
+Future<void> swipeBack(WidgetTester tester) async {
+  await tester.dragFrom(const Offset(5, 300), const Offset(600, 0));
+  await tester.pumpAndSettle();
 }
 
 /// Collects the errors reported to [FlutterError] until the end of a plain `test`.

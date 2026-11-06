@@ -282,6 +282,10 @@ The example has a widgets-only port of Flutter's iOS edge swipe for custom route
 `CupertinoRouteTransitionMixin` always have the swipe, and those built with `MaterialRouteTransitionMixin` get it from
 a theme that uses `CupertinoPageTransitionsBuilder`.
 
+Like the back button, the swipe respects a nested Elixir: while it is visible and can pop, the route hosting it can't be
+swiped away. The swipe goes to its top page, and over an open dialog or sheet it does nothing. A nested Elixir with
+`onBackButtonPressed` doesn't block its route, since the callback may decline the press.
+
 ## Core API
 
 ### ElixirPage

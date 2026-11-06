@@ -160,6 +160,91 @@ void main() {
     });
   });
 
+  group('W25: swipe-back of a route hosting a nested Elixir', () {
+    /// An outer Elixir whose swipeable `scope` page hosts [child].
+    Future<ElixirController> pumpScope(WidgetTester tester, Widget child) async {
+      final outer = controllerOf([a, SwipeTestPage(Alias.scope, child: child)]);
+      await pumpApp(tester, Elixir(controller: outer));
+      return outer;
+    }
+
+    testWidgets('closes the pages of the nested Elixir first, then the route', (tester) async {
+      final inner = controllerOf([const SwipeTestPage(Alias.b), const SwipeTestPage(Alias.c)]);
+      final outer = await pumpScope(tester, Elixir(controller: inner));
+
+      await swipeBack(tester);
+      expect(aliases(inner), [Alias.b]);
+      expect(aliases(outer), [Alias.a, Alias.scope]);
+
+      await swipeBack(tester);
+      expect(aliases(outer), [Alias.a]);
+    });
+
+    testWidgets('leaves the route under a sheet of the nested Elixir', (tester) async {
+      final inner = controllerOf([const SwipeTestPage(Alias.b), const SheetTestPage(Alias.sheet)]);
+      final outer = await pumpScope(tester, Elixir(controller: inner));
+
+      await swipeBack(tester);
+      expect(aliases(inner), [Alias.b, Alias.sheet]);
+      expect(aliases(outer), [Alias.a, Alias.scope]);
+
+      expect(await back(tester), isTrue);
+      expect(aliases(inner), [Alias.b]);
+
+      await swipeBack(tester);
+      expect(aliases(outer), [Alias.a]);
+    });
+
+    testWidgets('a hidden nested Elixir does not block it', (tester) async {
+      final inner = controllerOf([b, c]);
+      final outer = await pumpScope(tester, Visibility.maintain(visible: false, child: Elixir(controller: inner)));
+
+      await swipeBack(tester);
+      expect(aliases(outer), [Alias.a]);
+    });
+
+    testWidgets('a nested onBackButtonPressed that declines the press lets the route close', (tester) async {
+      final inner = controllerOf([b, c]);
+      final outer = await pumpScope(tester, Elixir(controller: inner, onBackButtonPressed: (_) async => false));
+
+      expect(await back(tester), isTrue);
+      expect(aliases(outer), [Alias.a]);
+    });
+
+    testWidgets('Navigator.maybePop above the nested Elixir goes to it', (tester) async {
+      final inner = controllerOf([b, c]);
+      final outer = await pumpScope(
+        tester,
+        Column(
+          children: [
+            Builder(
+              builder: (context) => TextButton(onPressed: () => Navigator.maybePop(context), child: const Text('back')),
+            ),
+            Expanded(child: Elixir(controller: inner)),
+          ],
+        ),
+      );
+
+      await tester.tap(find.text('back'));
+      await tester.pumpAndSettle();
+      expect(aliases(inner), [Alias.b]);
+      expect(aliases(outer), [Alias.a, Alias.scope]);
+
+      await tester.tap(find.text('back'));
+      await tester.pumpAndSettle();
+      expect(aliases(outer), [Alias.a]);
+    });
+
+    testWidgets('a PopScope of the route does not pop the nested Elixir', (tester) async {
+      final inner = controllerOf([b]);
+      final outer = await pumpScope(tester, PopScope<Object?>(canPop: false, child: Elixir(controller: inner)));
+
+      expect(await back(tester), isTrue);
+      expect(aliases(outer), [Alias.a, Alias.scope]);
+      expect(aliases(inner), [Alias.b]);
+    });
+  });
+
   group('state', () {
     testWidgets('W7: transitions of the outer navigator do not re-run the inner guards', (tester) async {
       var runs = 0;

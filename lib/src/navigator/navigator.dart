@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
@@ -29,6 +30,9 @@ typedef ElixirListener = void Function(ElixirNotification notification);
 /// default `navigator.maybePop()`. So a dialog or a sheet on top closes first, `PopScope` is respected, and the last
 /// page lets the platform close the app. A nested Elixir is visible while its route is current and it is not hidden
 /// by a [Visibility], e.g. an inactive tab of an [IndexedStack].
+///
+/// While a visible nested Elixir can pop, it blocks the route hosting it, so the swipe-back of that route never closes
+/// the route with an open sheet or with pages stacked inside it.
 /// {@endtemplate}
 class Elixir extends StatefulWidget {
   /// {@macro elixir}
@@ -64,7 +68,8 @@ class Elixir extends StatefulWidget {
 
   /// Replaces the default reaction to the back button, `navigator.maybePop()`.
   ///
-  /// Called only when the press reaches this Elixir: no visible nested Elixir has handled it.
+  /// Called only when the press reaches this Elixir: no visible nested Elixir has handled it. A nested Elixir given
+  /// this may decline the press, so it does not block the swipe-back of the route hosting it.
   /// ```dart
   /// onBackButtonPressed: (navigator) async {
   ///   if (controller.state.last.tags.contains('checkout')) {
@@ -145,6 +150,9 @@ class _ElixirState extends State<Elixir> with WidgetsBindingObserver {
   ModalRoute<Object?>? _route;
   bool _shown = true;
   bool _reportScheduled = false;
+
+  /// Whether this nested Elixir blocks [_route]: the swipe of a route knows nothing about the navigator inside it.
+  bool _holdsRoute = false;
 
   /* #region Lifecycle */
   @override
@@ -262,7 +270,7 @@ class _ElixirState extends State<Elixir> with WidgetsBindingObserver {
 
   /// Writes the pages, one per line after [indent], each with the Elixirs nested in it. The active page, the top one
   /// of an Elixir that is [shown] and [_visible], is green.
-  // ponytail: an Elixir in a route that is not one of the pages, e.g. a `showDialog`, is left out.
+  // An Elixir in a route that is not one of the pages, e.g. a `showDialog`, is left out.
   void _writeTree(StringBuffer out, String indent, {required bool shown}) {
     final pages = widget.controller.state;
     for (final (index, page) in pages.indexed) {
@@ -387,10 +395,19 @@ class _ElixirState extends State<Elixir> with WidgetsBindingObserver {
 
   void _dispatchBackButton() {
     if (!mounted) return;
+    // Only a nested Elixir: the navigator of a root one would swallow the press before the root gets it.
+    final holdsRoute = _parent != null && widget.onBackButtonPressed == null && _canHandlePop;
+    if (holdsRoute != _holdsRoute) setState(() => _holdsRoute = holdsRoute);
     if (_parent case final parent?) return parent._dispatchBackButton();
     // Deactivated, e.g. while it moves with a global key.
     if (!_roots.contains(this)) return;
     NavigationNotification(canHandlePop: _roots.any((root) => root._canHandlePop)).dispatch(context);
+  }
+
+  /// A pop of the route this Elixir blocks, e.g. the `BackButton` of an `AppBar` above it.
+  // Two visible nested Elixirs in one route both pop here; an outer `maybePop` is the only way to get here.
+  void _handleRoutePopBlocked(bool didPop, Object? result) {
+    if (!didPop && _holdsRoute) unawaited(_handleBackButton());
   }
 
   /// Withdraws the claim of the last root Elixir, which nothing else would replace.
@@ -412,14 +429,18 @@ class _ElixirState extends State<Elixir> with WidgetsBindingObserver {
       onNotification: _handleNestedChange,
       child: NotificationListener<NavigationNotification>(
         onNotification: _handleNavigationNotification,
-        child: Navigator(
-          // A new list, so the navigator also brings back a page a guard kept after the user closed it.
-          pages: List<Page<Object?>>.of(widget.controller.state),
-          onDidRemovePage: _handleDidRemovePage,
-          observers: _observers,
-          transitionDelegate: widget.transitionDelegate,
-          restorationScopeId: widget.restorationScopeId,
-          reportsRouteUpdateToEngine: widget.reportsRouteUpdateToEngine,
+        child: PopScope<Object?>(
+          canPop: !_holdsRoute,
+          onPopInvokedWithResult: _handleRoutePopBlocked,
+          child: Navigator(
+            // A new list, so the navigator also brings back a page a guard kept after the user closed it.
+            pages: List<Page<Object?>>.of(widget.controller.state),
+            onDidRemovePage: _handleDidRemovePage,
+            observers: _observers,
+            transitionDelegate: widget.transitionDelegate,
+            restorationScopeId: widget.restorationScopeId,
+            reportsRouteUpdateToEngine: widget.reportsRouteUpdateToEngine,
+          ),
         ),
       ),
     ),

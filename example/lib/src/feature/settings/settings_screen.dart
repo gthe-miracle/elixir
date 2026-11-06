@@ -45,6 +45,41 @@ class _SettingsScreenState extends State<SettingsScreen> {
             Text('Dialog result: $_result'),
             TextButton(onPressed: _openDialog, child: const Text('Open dialog')),
             TextButton(onPressed: () => context.elixir.push(const AboutSheetPage()), child: const Text('Open sheet')),
+            TextButton(
+              onPressed: () => context.elixir.push(const SettingsDetailPage()),
+              child: const Text('Open detail page'),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+/// {@template settings_screen}
+/// SettingsScreenDetail widget.
+/// {@endtemplate}
+class SettingsScreenDetail extends StatelessWidget {
+  const SettingsScreenDetail({super.key});
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    backgroundColor: Colors.cyan,
+    appBar: AppBar(
+      // The settings Elixir has a single page: leave it through the root one.
+      leading: IconButton(
+        icon: const Icon(Icons.arrow_back),
+        onPressed: () => App.controllerOf(context).popUntil(AppRoutes.home),
+      ),
+      title: const Text('Settings'),
+    ),
+    body: SafeArea(
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Detail'),
+            TextButton(onPressed: () => App.controllerOf(context).popUntil(AppRoutes.home), child: const Text('Pop')),
           ],
         ),
       ),

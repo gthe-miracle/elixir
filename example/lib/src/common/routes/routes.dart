@@ -24,7 +24,8 @@ enum AppRoutes implements ElixirAlias {
 enum Settings implements ElixirAlias {
   settings('settings'),
   dialog('settings_dialog'),
-  about('about');
+  about('about'),
+  detail('settings_detail');
 
   const Settings(this.alias);
 
@@ -90,6 +91,13 @@ final class SettingsPage extends AppPage {
 
   @override
   ElixirAlias get alias => Settings.settings;
+}
+
+final class SettingsDetailPage extends AppPage {
+  const SettingsDetailPage() : super(child: const SettingsScreenDetail());
+
+  @override
+  ElixirAlias get alias => Settings.detail;
 }
 
 /// Opened with `pushForResult<bool>`: the dialog pops `true` or `false`.

@@ -62,8 +62,16 @@ class _AppState extends State<App> {
   Widget build(BuildContext context) => MaterialApp(
     title: 'Declarative Navigation',
     debugShowCheckedModeBanner: false,
-    theme: ThemeData(brightness: Brightness.light, pageTransitionsTheme: _transitions),
-    darkTheme: ThemeData(brightness: Brightness.dark, pageTransitionsTheme: _transitions),
+    theme: ThemeData(
+      brightness: Brightness.light,
+      pageTransitionsTheme: _transitions,
+      textButtonTheme: TextButtonThemeData(style: TextButton.styleFrom(foregroundColor: Colors.black)),
+    ),
+    darkTheme: ThemeData(
+      brightness: Brightness.dark,
+      pageTransitionsTheme: _transitions,
+      textButtonTheme: TextButtonThemeData(style: TextButton.styleFrom(foregroundColor: Colors.white)),
+    ),
     themeMode: _themeMode,
     builder: (context, _) => Elixir(controller: _controller, listener: _log),
   );
